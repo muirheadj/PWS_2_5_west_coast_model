@@ -1,0 +1,251 @@
+# This is the main control program for the infection model for various levels
+# of transmission probability. It runs the model for each combination of
+# transmission probability and then saves the results to lists at the end.
+#
+# Author: jmuirhead
+###############################################################################
+
+params <- commandArgs(trailingOnly = TRUE)
+
+suppressMessages(TRUE)
+
+library("methods")
+library("utils")
+library("reshape2")
+library("data.table")
+library("lazyeval")
+library("dplyr")
+library("ggplot2")
+library("abind")
+library("bit")
+library("Rcpp")
+library("RcppArmadillo")
+library("iterators")
+library("assertive.numbers")
+library("stringi")
+library("futile.logger")
+library("rprojroot")
+ 
+root_crit <- has_dirname("epidemiology_model", subdir = "src")
+root_dir <- root_crit$make_fix_file()
+
+root_dir()
+
+options(tibble.width = Inf)
+
+# Helper functions
+chunkr <- function(vec, chunk_size = NULL, n_chunks = NULL,
+	use_bit_package = FALSE){
+  if (is.null(chunk_size) && is.null(n_chunks)){
+    stop(stri_c("You must provide either the size of the chunks ",
+    	" or number of desired chunks"))
+  }
+
+  if (is.null(chunk_size)){
+    if (n_chunks == 1){
+      chunk <- vec
+    } else {
+      chunk <- split(vec, cut(seq_along(vec), n_chunks, labels = FALSE))
+    }
+  }
+  if (is.null(n_chunks)) chunk <- split(vec,
+  	ceiling(seq_along(vec) / chunk_size))
+
+  if (use_bit_package == TRUE) chunk <- bit::chunk(from = 1, to = length(vec),
+  	by = chunk_size, length.out = n_chunks)
+  chunk
+}
+
+`%nin%` <- Negate(`%in%`)
+
+# Wrapper for table to always report missing values
+table <- function (..., useNA = "always") base::table(..., useNA = useNA)
+
+# Set up tracer and info loggers
+
+log_name <- function(x) paste0("parameter",
+  sprintf("%03d", as.numeric(params[1])), "_", x)
+
+flog.logger(name = "ports_pop_trace", TRACE,
+  appender = appender.tee(log_name("ports_pop_trace.log")))
+flog.logger(name = "ports_n_trace", TRACE,
+  appender = appender.tee(log_name("ports_n_trace.log")))
+flog.logger(name = "model_progress", INFO,
+  appender = appender.console())
+flog.logger(name = "juve_lag", TRACE,
+  appender = appender.tee(log_name("juvenile_trace.log")))
+flog.logger(name = "ships_pop_trace", TRACE,
+  appender = appender.tee(log_name("ships_pop_trace.log")))
+flog.logger(name = "ports_instant_mortality_trace", TRACE,
+  appender = appender.tee(log_name("ports_instant_mortality_trace.log")))
+
+flog.threshold(WARN, name = "ports_pop_trace")
+flog.threshold(WARN, name = "ports_n_trace")
+flog.threshold(WARN, name = "juve_lag")
+flog.threshold(WARN, name = "ships_pop_trace")
+flog.threshold(WARN, name = "ports_instant_mortality_trace")
+
+
+# Set up lifestages, incl which lifestages disperse (sp = ship to port)
+ship_to_port_lifestages <- c("larva" = 1, "cyprid" = 0, "juvenile" = 0,
+  "adult" = 0)
+port_to_ship_lifestages <- c("larva" = 0, "cyprid" = 1, "juvenile" = 0,
+  "adult" = 0)
+
+
+ # Population transition matrix
+ pop_transition <- matrix(data = c(0.7, 0, 0, 2.4, 0.12, 0.7, 0, 0, 0, 0.08,
+   0.8, 0, 0, 0, 0.12, 0.975), nrow = 4, ncol = 4, byrow = TRUE)
+
+ dimnames(pop_transition)[[1]] <- dimnames(pop_transition)[[2]] <-
+   names(ship_to_port_lifestages)
+
+# Reproductive and development time lag in seconds
+larval_dev_lag <- (7 * 24 * 60 * 60) # 7 days until cyprids can appear
+juvenile_lag <- (1 * 24 * 60  * 60) # 1 day until juveniles can first appear after cyprids appear in the population
+mature_lag <- (60 * 24 * 60 * 60) # McDonald et al 2009: 8 weeks post-settlement
+repro_lag <- (14 * 24 * 60 * 60) # McDonald et al 2009: 10 weeks post-settlement
+
+
+# Identify seed bioregions
+seed_bioregions <- c("NEA-II", "NWP-2")
+
+# Define port area in square meters
+port_area <- 1e+07 # 312 times larger than max wsa for ships, 1546 times larger
+# than average ship wsa
+
+# Define carrying capacity per square meter
+max_density_individuals <- 5e+3
+
+# Generate combination of parameters
+parameter_grid <- expand.grid(port_area = port_area,
+  K_ports = port_area * max_density_individuals,
+  fw_reduction = c(1.0, 0.5, 0.1, 0.01, 0.0),
+  max_density_individuals = max_density_individuals,
+  larval_dev_lag = larval_dev_lag,
+  juvenile_lag = juvenile_lag,
+  mature_lag = mature_lag,
+  repro_lag = repro_lag,
+  seed_bioregions = seed_bioregions,
+	ship_port_prob =  1.0,
+	port_compentency_prob = 1.0,
+  stringsAsFactors = FALSE)
+
+# Re-assign date_list_ext
+full_date_list <- format(seq(from = as.POSIXct("2009-11-16 00:00:00",
+	tz = "UTC"), to = as.POSIXct("2014-11-16 00:00:00", tz = "UTC"),
+  by = "6 hours"), format = "%Y-%m-%d %H:%M:%S")
+
+# Cycle through bootstrap population loops
+boot_iter <- as.numeric(params[2])
+
+boot_iter <- 1
+
+boot_directory <- file.path(root_dir(), "data",
+    stri_c("bootstrap_iter", sprintf("%0.3d", boot_iter)))
+
+flog.info("boot directory: %s", boot_directory,  name = "model_progress.log")
+
+# Get ship imo info, ships_array and ports_array (population arrays)
+ship_ports_filelist <- list.files(path = boot_directory,
+  pattern = "ships_ports*", full.names = TRUE, recursive = TRUE)
+
+ships_and_ports <- readRDS(ship_ports_filelist[[1]])
+
+ship_imo_tbl <- ships_and_ports[[1]]
+
+# Set the effective wsa for ships to be 10% of the wetted surface area
+effective_wsa_scale <- 0.1
+ship_imo_tbl[["effective_wsa"]] <- ship_imo_tbl[["wsa"]] * effective_wsa_scale
+
+summary(ship_imo_tbl$effective_wsa)
+
+ships_pop_temp <- ships_and_ports[[2]] # 5085 rows (ships), \
+# 7305 columns (time steps)
+ports_pop_temp <- ships_and_ports[[3]] # 7305 rows (time steps),
+# 1191 columns (ports)
+
+ships_instant_mortality <- ships_and_ports[[2]]
+ports_instant_mortality <- ships_and_ports[[3]]
+
+# Make sure the ports_pop_temp matrix names are in the right order
+dimnames(ports_pop_temp)[[2]] <- sort(dimnames(ports_pop_temp)[[2]])
+
+dimnames(ports_instant_mortality)[[2]] <-
+  sort(dimnames(ports_instant_mortality)[[2]])
+
+
+# Get list of bootstrapped ship populations
+boot_filelist <- list.files(path = boot_directory,
+  pattern = "chunk[0-9]{3}.rds$", full.names = FALSE, recursive = TRUE)
+
+# Reshape some of the arrays for the population growth model
+source(file.path(root_dir(), "munge", "04-select_ship_sources_for_caribbean.R"))
+
+# Get list of ports in the selected seed bioregion
+
+port_data <- readRDS(file = file.path(root_dir(), "data", "ports_data.rds")) %>%
+  arrange(PortStd)
+
+# Setup invasion status (population density of organisms) of initial ports 
+# (ports_array)
+
+seed_ports_fn <- function(param, ports_pop_input, lifestages){
+
+  # Check if port names matches up with the ports_ppop_input
+  flog.info("Port name check: %s", all(dimnames(ports_pop_input)[[3]] %in%
+              port_data[["PortStd"]]) == TRUE, name = "model_progress.log")
+
+  seed_ports <- port_data[port_data$REG_LRGGEO %in%
+      param[, "seed_bioregions"] &
+      port_data$PortStd %in% dimnames(ports_pop_input)[[3]], ] %>%
+    arrange(PortStd)
+
+  n_lifestages <- length(lifestages)
+
+  n_at_carrying_capacity <- param[, "K_ports"]
+
+  n_at_stability <- c(larva = 3334269129, cyprid = 1000280739,
+  	juvenile = 264593012, adult = 416783641)
+
+  seed_value <- array(data = rep(n_at_stability,
+  	  each = dim(ports_pop_input)[1]),
+    dim = list(dim(ports_pop_input)[1], length(lifestages), nrow(seed_ports)),
+    dimnames = list(dimnames(ports_pop_input)[[1]], names(lifestages),
+      seed_ports[["PortStd"]]))
+
+# Set up some populations in the seed ports
+# Note: This matches the port names from
+# seed ports, all the dates and lifestages
+
+  afill(ports_pop_input, local = TRUE) <- seed_value
+  ports_pop_input
+}
+
+# Source c++ version of population growth
+sourceCpp(file.path(root_dir(), "src", "popgrow.cpp"), verbose = FALSE)
+
+# Source c++ version of stochastic matrix
+sourceCpp(file.path(root_dir(), "src", "stoch_pop_growth.cpp"), verbose = FALSE)
+
+# Pass parameters to model based on arguments supplied to Rscript
+param_iter <- as.numeric(params[1])
+
+  # Add a dimension for the number of life stages in the population
+ships_pop <- ships_array_add(ships_pop_temp,
+  lifestages = ship_to_port_lifestages)
+ports_pop_temp <- ports_array_add(ports_pop_temp,
+  lifestages = ship_to_port_lifestages)
+ports_pop <- seed_ports_fn(param = parameter_grid[param_iter, ],
+  ports_pop_temp, lifestages = ship_to_port_lifestages)
+
+source(file.path(root_dir(), "src", "02-main_model.R"))
+
+# Run main model
+
+model_run <- main_model_fn(ship_imo_tbl, param = parameter_grid[param_iter, ],
+	pop_transition, ports_pop, root_dir(), boot_directory, param_iter, boot_iter,
+    ship_to_port_lifestages, port_to_ship_lifestages, ships_instant_mortality,
+    ports_instant_mortality)
+
+  flog.info("Finished model run", name = "model_progress.log")
