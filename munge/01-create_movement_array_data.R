@@ -7,16 +7,16 @@
 library("reshape2")
 library("data.table")
 library("dplyr")
-library("dtplyr")
-library("rhelpers")
 library("assertive")
 library("Hmisc")
 library("stringr")
 library("readr")
 library("futile.logger")
 library("rprojroot")
+library("keyring")
 
-root_crit <- has_dirname("epidemiology_model", subdir = "src")
+
+root_crit <- has_dirname("PWS_2_5_west_coast_model", subdir = "src")
 root_dir <- root_crit$make_fix_file()
 
 options(tibble.width = Inf) # Print all columns
@@ -57,26 +57,22 @@ readable_time <- function(x) {
 }
 
 
-## load data ## ---------------------------------------------------------------
-#setwd("/Users/jmuirhead/Documents/Post-Doc Maryland/epidemiology_model/")
+## load data ## --------------------------------------------------------------
 
-ship_src <-
-  src_mysql(
+ship_con <-
+  DBI::dbConnect(RMySQL::MySQL(),
+    host = "serc-cg01-new.si.edu",
     dbname = "IHS_transits",
-    default.file = "~/.my.cnf",
-    groups = "ihs_transits_test",
-    user = NULL,
-    password = NULL
+    user = "muirheadj",
+    password = key_get("ihs_transits_test")
   )
 
 ship_data <-
-  tbl(ship_src, sql("SELECT * FROM panama_caribbean_merged")) %>%
+  tbl(ship_con, sql("SELECT * FROM panama_caribbean_merged")) %>%
   collect(n = Inf)
 
-ihs_port_list <- tbl(
-  ship_src,
-  sql(
-    "SELECT DISTINCT
+ihs_port_list <- tbl(ship_con,
+   sql("SELECT DISTINCT
     PortStd
 FROM
     panama_caribbean_merged
@@ -84,13 +80,11 @@ WHERE
     PortStd IS NOT NULL
         AND PortStd != 'Gibraltar'
 ORDER BY PortStd"
-  )
-) %>%
-  collect(n = Inf)
-
+  )) %>%
+  collect()
 
 port_data_full <- tbl(
-  ship_src,
+  ship_con,
   sql(
     "SELECT DISTINCT
     PortStd,
@@ -113,6 +107,8 @@ port_data <- port_data_full %>%
 saveRDS(port_data, file.path(root_dir(), "data", "ports_data.rds"))
 
 
+DBI::dbDisconnect(ship_con)
+
 ## ship movement ## -----------------------------------------------------------
 # Ports blacklist to exclude from analysis
 ports_blacklist <- c(
@@ -126,7 +122,7 @@ ports_blacklist <- c(
   "Panama Pacific Lightering Area (PANPAC)"
 )
 
-ships_blacklist <- c("Barge", "Military", "Combo", "Other")
+ships_blacklist <- c("Military", "Combo", "Other")
 
 # Change dates and times to POSIXct format
 datetype_grep <-
@@ -134,7 +130,7 @@ datetype_grep <-
     perl = TRUE)
 ship_data[, datetype_grep] <- lapply(ship_data[, datetype_grep],
   function(x)
-    as.POSIXct(x, tz = "GMT"))
+    as.POSIXct(x, tz = "UTC"))
 
 
 # Filter out blacklisted ship types, ports, etc.
@@ -142,17 +138,13 @@ ship_raw_tbl <-
   tbl_df(ship_data[ship_data$ShipType %nin% ships_blacklist &
       ship_data$NBIC_ShipType %nin% ships_blacklist &
       ship_data$PortStd %nin% ports_blacklist,]) %>%
-  filter(
-    ArrivalDateFullStd <= as.POSIXct("2010-05-07", tz = "GMT") &
-      SailDateFullStd <= as.POSIXct("2010-05-07", tz = "GMT")
-  ) %>%
   arrange(LRNOIMOShipNo, ArrivalDateFull)
 
 
 # Calculate difference between ArrivalDateStd and SailDateStd for each port
 # calling
 
-ship_raw_tbl2 <- ship_raw_tbl %>%
+ship_raw_tbl <- ship_raw_tbl %>%
   select(
     LRNOIMOShipNo,
     NBIC_ShipType,
@@ -178,13 +170,12 @@ ship_raw_tbl2 <- ship_raw_tbl %>%
 ## ----WettedSurfaceArea_Calculations--------------------------------------
 # Calculate wetted surface area from IHS_Fairplay table
 
-nbic_src <-
-  src_mysql(
+nbic_con <-
+  DBI::dbConnect(RMySQL::MySQL(),
+    host = "serc4.si.edu",
     dbname = "NBIC_Analysis",
-    default.file = "~/.my.cnf",
-    groups = "nbic_analysis",
-    user = NULL,
-    password = NULL
+    user = "nbicuser",
+    password = key_get("nbic_analysis_test")
   )
 
 wsa_calc_qry <- "SELECT
@@ -198,14 +189,14 @@ wsa_calc_qry <- "SELECT
 FROM
     IHS_Fairplay"
 
-wsa_df <- tbl(nbic_src, sql(wsa_calc_qry)) %>%
+wsa_df <- tbl(nbic_con, sql(wsa_calc_qry)) %>%
   collect(n = Inf)
 
-DBI::dbDisconnect(nbic_src$con)
+DBI::dbDisconnect(nbic_con)
 
 # Add to existing data
-ship_raw_tbl3 <-
-  left_join(ship_raw_tbl2, wsa_df, by = "LRNOIMOShipNo") %>%
+ship_raw_tbl <-
+  left_join(ship_raw_tbl, wsa_df, by = "LRNOIMOShipNo") %>%
   rename(ShipType = NBIC_ShipType)
 
 # Calculate wetted surface area depending on ship type
@@ -241,14 +232,13 @@ wsa_calc_fn <- function(x, y) {
 }
 
 
-ship_raw_tbl3 <-
-  ship_raw_tbl3 %>% mutate(wsa = unlist(mapply(wsa_calc_fn,
-    .$ShipType, .$Nrt)))
-
+ship_raw_tbl <-
+  ship_raw_tbl %>%
+  mutate(wsa = unlist(mapply(wsa_calc_fn, .$ShipType, .$Nrt)))
 
 # Filter out bad ships than are drive-bys (must spend at least 1/2 hour in ports)
-ship_movement_raw_tbl <- tbl_dt(
-  ship_raw_tbl3 %>%
+ship_movement_raw_tbl <- dtplyr::tbl_dt(
+  ship_raw_tbl %>%
     filter(., port_duration > 0.5) %>%
     select(
       .,
@@ -276,8 +266,11 @@ ship_movement_raw_tbl <- tbl_dt(
 # vessel
 
 ship_imo_temp_tbl <-
-  ship_movement_raw_tbl %>% group_by(LRNOIMOShipNo) %>%
-  select(ShipType, wsa, GT, Nrt) %>% unique()
+  ship_movement_raw_tbl %>%
+  group_by(LRNOIMOShipNo) %>%
+  select(ShipType, wsa, GT, Nrt) %>%
+  unique()
+  
 ship_imo_temp_tbl <- ship_imo_temp_tbl %>%
   mutate(., LRNOIMOShipNo = paste0("IMO", LRNOIMOShipNo))
 
@@ -295,19 +288,16 @@ ship_imo_tbl <-
   cbind(LRNOIMOShipNo = ship_imo_temp_tbl$LRNOIMOShipNo,
     imp_df,
     stringsAsFactors = FALSE)
+    
+rm(ship_imo_temp_tbl)
 
 ##---End of Wetted Surface Area calculations-----------------------------------
 
 ## Get range of time indices for the data
-date_min <-
-  min(ship_movement_raw_tbl[['ArrivalDateFullStd']], na.rm = TRUE)
-
-#date_min <- fasttime::fastPOSIXct("2009-11-15 0:00:00", tz = "GMT")
+date_min <- as.POSIXct("2010-01-01 00:00:00", tz = "UTC")
 
 # Add a bit of a buffer in order to make sure the upper end gets captured
-date_max <-
-  max(ship_movement_raw_tbl[['SailDateFullStd']], na.rm = TRUE)
-#date_max <- fasttime::fastPOSIXct("2010-05-06 00:00:00", tz = "GMT")
+date_max <- as.POSIXct("2018-12-31 18:00:00", tz = "UTC")
 
 # Create a sequence of times
 time_seq <-
@@ -325,13 +315,14 @@ ship_raw_tbl <- ship_movement_raw_tbl %>%
   ) %>%
   filter(arr_time_idx > 0) %>%
   mutate(arrivaltime_slice = time_seq[arr_time_idx],
-    sailtime_slice = time_seq[sail_time_idx]) %>% unique()
+    sailtime_slice = time_seq[sail_time_idx]) %>%
+  unique()
 
 
 ## The model_daterange vector contains the complete range of dates and
 ## time indices even though they may not be present in the data
 
-model_daterange <- data_frame(time_slice = seq(min(ship_raw_tbl[['arrivaltime_slice']]),
+model_daterange <- tibble(time_slice = seq(min(ship_raw_tbl[['arrivaltime_slice']]),
   max(ship_raw_tbl[['arrivaltime_slice']]), by = '6 hours'))
 
 model_daterange[['time_idx']] <-
@@ -340,21 +331,22 @@ model_daterange[['time_idx']] <-
 ## ship invasion status ## ----------------------------------------------------
 
 # select ships by unique IMO number (4120 ships, repeat 717 times) 716?
-ship_df_1 <-
+ship_shipnames <-
   data.frame(
     LRNOIMOShipNo = ship_imo_tbl[['LRNOIMOShipNo']],
     ShipType = ship_imo_tbl[['ShipType']],
     stringsAsFactors = FALSE
   )
 
-ship_df_2 <-
+ship_datetime <-
   data.frame(
     time_slice = model_daterange[['time_slice']],
     time_idx = model_daterange[['time_idx']],
     stringsAsFactors = FALSE
   )
 
-ships_df <- reshape::expand.grid.df(ship_df_1, ship_df_2) %>%
+# Create a data.frame with every combination of ship and time
+ships_df <- reshape::expand.grid.df(ship_shipnames, ship_datetime) %>%
   tbl_df()
 
 ships_df <- ships_df %>%
@@ -371,11 +363,11 @@ port_invasion_tbl <- ship_raw_tbl %>%
   select(PortStd) %>%
   unique()
 
-ports_df_1 <- port_data %>%
-  right_join(port_invasion_tbl) %>%
+port_portnames <- port_data %>%
+  right_join(port_invasion_tbl,  by = "PortStd") %>%
   arrange(PortStd)
 
-ports_df <- reshape::expand.grid.df(ports_df_1, ship_df_2)
+ports_df <- reshape::expand.grid.df(port_portnames, ship_datetime)
 ports_df <- tbl_df(ports_df) %>%
   arrange(PortStd, time_slice)
 
@@ -388,7 +380,7 @@ ship_list_full <- unique(ships_df[['LRNOIMOShipNo']])
 
 o <- order(ship_list_full)
 ship_list <- ship_list_full[o]
-port_list <- ports_df_1[["PortStd"]]
+port_list <- port_portnames[["PortStd"]]
 
 unique_port_list <- unique(select(ports_df, -time_slice, -time_idx))
 
@@ -401,7 +393,7 @@ flog.info("Finished loading and munging data", name = "info.log")
 
 # Generate table for ship and port invasion status by time
 
-position_array_temp <- array(
+position_array <- array(
   data = NA,
   dim = c(length(ship_list),
     length(port_list), length(datetime_list)),
@@ -417,19 +409,18 @@ position_array_temp <- array(
 # Gets ship name, position for each time step
 
 # Read in Mark's checklist for multiple ports to remove from data set
-locale(tz = "GMT")
+locale(tz = "UTC")
 port_checklist <- read_tsv("data/Multiple_stops_new.tsv")
 
 port_notuse <- port_checklist %>%
   mutate(arrivaltime_slice = lubridate::force_tz(arrivaltime_slice,
-    tzone = "GMT")) %>%
+    tzone = "UTC")) %>%
   filter(use == 0)
-
 
 # Function to troubleshoot ships that occupy more than 1 port in each time step
 ship_check_fn <- function(x, tt, save_output = FALSE) {
   suspect_array <-
-    position_array_temp[x, , tt, drop = FALSE] # Subsets position array
+    position_array[x, , tt, drop = FALSE] # Subsets position array
   suspect_ship <-
     dimnames(suspect_array)[[1]] # Extracts the ship IMO number
   suspect_ports <-
@@ -484,136 +475,48 @@ for (tt in seq_along(datetime_list)) {
   # rank to idx.  If one of the ports is an important hub port, it gets a 1,
   # otherwise, if it contains the maximum duration, it gets a 2.
 
-  ship_movement_sub_tbl3 <- ship_movement_sub_tbl %>%
+  ship_movement_sub_tbl <- ship_movement_sub_tbl %>%
     group_by(LRNOIMOShipNo, arrivaltime_slice) %>%
     mutate(idx = ifelse(
-      PortStd %in% c("Panama Canal", "Houston"),
-      1,
+      PortStd %in% c("Panama Canal", "Houston"), 1,
       ifelse(duration == max(duration), 2, NA)
     ))
 
   # Select only the ports that have the lowest "importance" index
-  ship_movement_sub_tbl4 <- ship_movement_sub_tbl3 %>%
+  ship_movement_sub_tbl <- ship_movement_sub_tbl %>%
     group_by(LRNOIMOShipNo, arrivaltime_slice) %>%
-    filter(which.min(idx)) %>% select(-idx)
+    filter(which.min(idx)) %>%
+    select(-idx)
 
   # If a record exists for this combination, match the record to its
   # corresponding position in the array.
 
-  if (nrow(ship_movement_sub_tbl4) > 0) {
-    ship_match <- match(ship_movement_sub_tbl4[['LRNOIMOShipNo']],
-      dimnames(position_array_temp)[[1]])
-    port_match <- match(ship_movement_sub_tbl4[['PortStd']],
-      dimnames(position_array_temp)[[2]])
+  if (nrow(ship_movement_sub_tbl) > 0) {
+    ship_match <- match(ship_movement_sub_tbl[['LRNOIMOShipNo']],
+      dimnames(position_array)[[1]])
+    port_match <- match(ship_movement_sub_tbl[['PortStd']],
+      dimnames(position_array)[[2]])
     time_match <- match(
       format(datetime_list[[tt]],
         format = "%Y-%m-%d %H:%M:%S"),
-      dimnames(position_array_temp)[[3]]
+      dimnames(position_array)[[3]]
     )
 
     pos_match <-
       matrix(cbind(ship_match, port_match, rep(time_match,
         length = length(port_match))), ncol = 3)
 
-    position_array_temp[pos_match] <- TRUE
+    position_array[pos_match] <- TRUE
   }
 
   warn <-
-    assert_all_are_in_closed_range(rowSums(position_array_temp[, , tt],
+    assert_all_are_in_closed_range(rowSums(position_array[, , tt],
       na.rm = TRUE), 0, 1)
 
   flog.info("Iteration: %i out of %i", tt, length(datetime_list),
     name = "info.log")
 
 } # End of tt loop
-
-
-flog.info("Beginning ship starting position randomization", name = "info.log")
-
-
-## Add section to randomize ship position
-
-ship_names <- dimnames(position_array_temp)[[1]]
-max_time_steps <- length(dimnames(position_array_temp)[[3]])
-
-set.seed(1234)
-new_pos <-
-  ceiling(runif(
-    n = length(ship_names),
-    min = 0,
-    max = max_time_steps
-  ))
-
-
-new_position_fn <- function(x, y) {
-  ship_pos <-
-    which(!is.na(position_array_temp[dimnames(position_array_temp)[[1]] == x, , , drop = FALSE]),
-      arr.ind = TRUE,
-      useNames = TRUE)
-
-  ship_pos[, "time_idx"] <-
-    (ship_pos[, "time_idx"] + y) %% max_time_steps
-  ship_pos[, "LRNOIMOShipNo"] <- match(x, ship_names)
-  ship_pos
-}
-
-new_ships_pos <- Map(new_position_fn, x = ship_names, y = new_pos)
-
-position_idx <- do.call(rbind, new_ships_pos)
-
-# Replace values in position_array with shifted timesteps
-
-position_array_temp[] <- NA
-position_array_temp[position_idx] <- TRUE
-
-position_array_temp_names_check <-
-  diff(order(dimnames(position_array_temp)[[2]]))
-
-
-# Data validation
-flog.info("Beginning data validation", name = "info.log")
-
-ship_num <- colSums(position_array_temp, 2, na.rm = TRUE)
-
-ship_num_df <-
-  data.frame(
-    date = fasttime::fastPOSIXct(names(ship_num), tz = "GMT"),
-    n = ship_num,
-    stringsAsFactors = FALSE
-  )
-rownames(ship_num_df) <- NULL
-
-
-(outliers <- ship_num_df %>% filter(n < 350))
-outliers_date <- format(outliers[['date']], "%Y-%m-%d %H:%M:%S")
-
-
-position_array <-
-  position_array_temp[, , dimnames(position_array_temp)[[3]] %nin% outliers_date]
-
-# Check order of names in position_array
-flog.info("Beginning check name order in position array", name = "info.log")
-
-position_array_names_check <-
-  diff(order(dimnames(position_array)[[2]]))
-
-flog.info("Position name check: %s",
-  ifelse(all(position_array_names_check == 1), "PASS", "FAIL"),
-  name = "info.log")
-
-rm(position_array_temp)
-
-ship_num_check2 <- colSums(position_array, 2, na.rm = TRUE)
-
-ship_num_df_check <- data.frame(
-  date = fasttime::fastPOSIXct(names(ship_num_check2), tz = "GMT"),
-  n = ship_num_check2,
-  stringsAsFactors = FALSE
-)
-
-rownames(ship_num_df) <- NULL
-
-ggplot(ship_num_df_check, aes(x = date, y = n)) + geom_point()
 
 flog.info("Saving position array to files", name = "info.log")
 

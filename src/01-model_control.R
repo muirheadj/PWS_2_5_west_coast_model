@@ -26,7 +26,7 @@ library("stringi")
 library("futile.logger")
 library("rprojroot")
  
-root_crit <- has_dirname("epidemiology_model", subdir = "src")
+root_crit <- has_dirname("PWS_2_5_west_coast_model", subdir = "src")
 root_dir <- root_crit$make_fix_file()
 
 root_dir()
@@ -120,7 +120,7 @@ max_density_individuals <- 5e+3
 # Generate combination of parameters
 parameter_grid <- expand.grid(port_area = port_area,
   K_ports = port_area * max_density_individuals,
-  fw_reduction = c(1.0, 0.5, 0.1, 0.01, 0.0),
+  fw_reduction = c(0.0),
   max_density_individuals = max_density_individuals,
   larval_dev_lag = larval_dev_lag,
   juvenile_lag = juvenile_lag,
@@ -132,8 +132,8 @@ parameter_grid <- expand.grid(port_area = port_area,
   stringsAsFactors = FALSE)
 
 # Re-assign date_list_ext
-full_date_list <- format(seq(from = as.POSIXct("2009-11-16 00:00:00",
-	tz = "UTC"), to = as.POSIXct("2014-11-16 00:00:00", tz = "UTC"),
+full_date_list <- format(seq(from = as.POSIXct("2010-01-01 00:00:00",
+  tz = "UTC"), to = as.POSIXct("2018-12-31 18:00:00", tz = "UTC"),
   by = "6 hours"), format = "%Y-%m-%d %H:%M:%S")
 
 # Cycle through bootstrap population loops
@@ -142,7 +142,7 @@ boot_iter <- as.numeric(params[2])
 boot_iter <- 1
 
 boot_directory <- file.path(root_dir(), "data",
-    stri_c("bootstrap_iter", sprintf("%0.3d", boot_iter)))
+  sprintf("bootstrap_iter%0.3d", boot_iter))
 
 flog.info("boot directory: %s", boot_directory,  name = "model_progress.log")
 

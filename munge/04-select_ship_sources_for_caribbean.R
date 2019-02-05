@@ -23,7 +23,6 @@ ships_array_add <- function(ships_pop_input, lifestages){
   ships_aperm_out
 }
 
-
 ports_array_add <- function(ports_pop_input, lifestages){
   # This function takes the ports_array generated at the bootstrapping stage
   # and adds another dimension the size of the number of lifestages generated

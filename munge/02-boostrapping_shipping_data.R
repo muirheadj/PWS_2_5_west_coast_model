@@ -12,7 +12,7 @@ library("parallel")
 library("futile.logger")
 library("rprojroot")
 
-root_crit <- has_dirname("epidemiology_model", subdir = "src")
+root_crit <- has_dirname("PWS_2_5_west_coast_model", subdir = "src")
 root_dir <- root_crit$make_fix_file()
 
 flog.appender(appender.console(), name = "info.log")
@@ -54,121 +54,31 @@ readable_time <- function (x) {
   t
 }
 
-# Beginning of boot function passed to mclapply
-parallel_boot <- function(x){
 
-flog.info("Processing bootstrap iterations: %s", x, name = "info.log")
-
-boot_ship_fn <- function(...){
-
-# Resample the ships data so that at least 5 years worth is generated
-ship_boot_list <- vector(mode = "list", length = 5)
-ship_boot_list[[1]] <- ship_list
-
-  for(i in 2:5){
-    ship_boot_list[[i]] <- c(ship_boot_list[[i - 1]], paste0(sample(ship_list,
-              size = ceiling(0.04588974 * length(ship_boot_list[[i - 1]])),
-              replace = FALSE), letters[[i]]))
-  }
-  ship_boot_list
-}
-
-# Pre-allocate space for extended ship position array chunks
-
-ext_position_array_chunk_fn <- function(date_list, date_chunks){
-  ext_m <- array(data = NA,
-                 dim = c(length(ship_list_ext),
-                       length(port_list), length(date_chunks)),
-                 dimnames = list(LRNOIMOShipNo = ship_list_ext,
-                                 PortStd = port_list,
-                                 time_idx = date_chunks))
-
-
-  ext_m[!ship_list_letter_pos, seq(port_list), ] <-
-    position_array[, seq(port_list), date_list]
-
-# Fill in the data for resampled ships that were added to the data set
-  ship_imo_match <- match(str_extract(ship_list_ext,
-          "\\bIMO[0-9]{7}"), ship_list)
-
-  position_subset <- ship_list_letter_pos * ship_imo_match # Get the ships that
-# are resampled and the row numbers where the originals were sampled from.
-# By multiplying with a logical, this returns just the row numbers
-# corresponding to the resampled ships.
-
-# Filter out cases containing original data
-  position_subset <- position_subset[position_subset > 0]
-
-  # Add the cloned data to the extended array
-  # CHECK FOR PROPER BEHAVIOUR
-  ext_m[ship_list_letter_pos, seq(port_list), ] <-
-    position_array[position_subset, seq(port_list), date_list]
-
-  ext_m
-}
-
-# Create a function to blank out records before the clones are supposed to come in
-
-clone_na_function <- function(posit_array_ext, ext_ship_list,
-  date_list_annual_idx){
-# Get imo numbers ending with b, c, d, e corresponding to each annual increase
-# For e, there is 385 days instead of 360 days for the other time periods
-
-  ships_resampled_b <- grep("[b]", ext_ship_list)
-  ships_resampled_c <- grep("[c]", ext_ship_list)
-  ships_resampled_d <- grep("[d]", ext_ship_list)
-  ships_resampled_e <- grep("[e]", ext_ship_list)
-
-# Now go 'back' in time and fill in NA for data for time slots before resampled
-# ships were introduced into the system.
-
-  posit_array_ext[ships_resampled_b, , date_list_annual_idx %in% 1] <- NA
-  posit_array_ext[ships_resampled_c, , date_list_annual_idx %in% 1:2] <- NA
-  posit_array_ext[ships_resampled_d, , date_list_annual_idx %in% 1:3] <- NA
-  posit_array_ext[ships_resampled_e, , date_list_annual_idx %in% 1:4] <- NA
-
-posit_array_ext
-}
-
-#boot_seq <- seq.int(from = b_start, to = b_stop)
-chunk_size <- 100
-
-for(bb in x){
-  ship_list_ext <- boot_ship_fn()[[5]]
-
-# Create output directory to store the chunks of data for each bootstrap iteration
- outputdir <- file.path(root_dir(), "data", stri_c("bootstrap_iter", sprintf("%0.3d", bb)))
-
-dir.create(outputdir, recursive = TRUE, mode = "0777")
 
 # Extend the date list
- ## Change to dates with time stamps of 6 hour intervals!!!!!
- date_list_ext <- format(seq(from = as.POSIXct("2009-11-16 00:00:00", tz = "UTC"),
-         to = as.POSIXct("2014-11-16 00:00:00", tz = "UTC"), by = "6 hours"),
- format = "%Y-%m-%d %H:%M:%S")
+## Get range of time indices for the data
+date_min <- as.POSIXct("2010-01-01 00:00:00", tz = "UTC")
+
+# Add a bit of a buffer in order to make sure the upper end gets captured
+date_max <- as.POSIXct("2018-12-31 18:00:00", tz = "UTC")
+
+# Create a sequence of times
+time_seq <-
+  seq(from = date_min,
+    to = date_max + (6 * 3600),
+    by = '6 hours')
+
+chunk_size <- 100
 
 # Extended date_list broken up into chunks of 100 time segments
- date_list_ext_chunks <- chunkr(date_list_ext, chunk_size = chunk_size,
+ date_list_chunks <- chunkr(time_seq, chunk_size = chunk_size,
    use_bit_package = FALSE)
 
 # Do the same for the length so that we can use these indices for further extraction
- date_list_length <- rep(1:dim(position_array)[[3]],
-   length.out = length(date_list_ext))
+ date_list_length <- seq_along(time_seq)
+   
  date_list_length_chunks <- chunkr(date_list_length, chunk_size = chunk_size)
-
-# Do the same for annual time indices
-# Note: Need extra day for last one, otherwise it will leave an NA for the last day
-  
- date_list_annual_breaks <- as.POSIXct(c("2009-11-16 00:00:00",
-         "2010-11-16 00:00:00", "2011-11-16 00:00:00", "2012-11-16 00:00:00",
-         "2013-11-16 00:00:00", "2014-11-17 00:00:00"),
-     tz = "UTC")
-
- date_list_annual_idx <- as.numeric(Hmisc::cut2(as.POSIXct(date_list_ext,
-   tz = "UTC"), date_list_annual_breaks))
- 
- date_list_annual_chunks <- chunkr(date_list_annual_idx,
-   chunk_size = chunk_size)
 
 # Preallocate ships, and ports arrays
 
@@ -181,13 +91,6 @@ dir.create(outputdir, recursive = TRUE, mode = "0777")
    ncol = length(port_list), dimnames = list(time_idx = date_list_ext,
      PortStd = sort(port_list)))
 
-# Get ship imo numbers without the letters
- ship_list_ext_numbers <- paste0("IMO", str_extract(ship_list_ext, "[0-9]{7}"))
-
-# Match which are extended by a letter
- ship_list_letter_pos <- str_detect(ship_list_ext, "[bcde]")
-
-
 # Table to store ship wetted surface area and Net Registered tonnage for
 # expanded ship list
  ship_imo_ext_idx <- match(ship_list_ext_numbers,
@@ -197,26 +100,29 @@ dir.create(outputdir, recursive = TRUE, mode = "0777")
  
  ship_imo_ext[['LRNOIMOShipNo']] <- ship_list_ext
 
-# Create an extended position_array in chunks of 100 time steps each
-  for (j in seq_along(date_list_ext_chunks)){
-    position_array_ext_temp <- ext_position_array_chunk_fn(
-        date_list_length_chunks[[j]],
-        date_list_ext_chunks[[j]])
 
-    position_array_ext <- clone_na_function(
-      posit_array_ext = position_array_ext_temp,
-      ext_ship_list = ship_list_ext,
-      date_list_annual_idx = date_list_annual_chunks[[j]]
-    )
+# Pull in saved arrays where ship movement and ship/port invasion status are
+# held
 
-    # Write to external object
-    saveRDS(position_array_ext, file = file.path(outputdir,
-        stri_c("position_array_chunk", sprintf("%0.3d", j), ".rds")),
-      compress = TRUE)
+flog.info("Loading PositionArray2.Rdata", name = "info.log")
+
+load(file.path(root_dir(), "data", "Positionarray2.RData"))
+
+# Create an position_array in chunks of 100 time steps each
+
+for (j in seq_along(date_list_chunks)) {
+
+  position_array_chunk <- position_array[ , , date_list_length_chunks[[j]],
+    drop = FALSE]
+    
+  # Write to external object
+  saveRDS(position_array_chunk, file = file.path(root_dir(), "data",
+    stri_c("position_array_chunk", sprintf("%0.3d", j), ".rds")),
+    compress = TRUE)
   
-    flog.info("Boot iter: %i, chunk iter: %i out of %i", bb, j, 
-    	length(date_list_ext_chunks), name = "info.log")
-  }
+ rm(position_array_chunk)
+ 
+}
 
 
   # Save the other objects
@@ -228,20 +134,9 @@ dir.create(outputdir, recursive = TRUE, mode = "0777")
 
   flog.info("Bootstrap iteration: %i out of %i finished", bb, max(bb),
     name = "info.log")
-  } # End of bb loop (Beginning 148)
-
-} # End of parallel_boot function
 
 
-chunk_list <- chunkr(1:1, n_chunks = 1)
-
-
-# Pull in saved arrays where ship movement and ship/port invasion status are
-# held
-
-flog.info("Loading PositionArray2.Rdata", name = "info.log")
-
-load(file.path(root_dir(), "data", "Positionarray2.RData"))
+foo <- as.tbl_cube(position_array_chunk)
 
 # Need ship_list, position_array, port_list,ship_imo_tbl
 keep_list <- c("x", "ship_list", "position_array",
@@ -253,19 +148,13 @@ rm(list = setdiff(ls(), keep_list))
 # Make sure port_list is in the right order
 port_list <- sort(port_list)
 
-#lapply(chunk_list, parallel_boot)
-
-
 port_list_names_check <- diff(order(port_list))
 position_array_names_check <- diff(order(dimnames(position_array)[[3]]))
 
-outputdir <- file.path(root_dir(), "data/",
-    stri_c("bootstrap_iter", sprintf("%0.3d", 1)))
 
 # Run the processing function
 flog.info("Running the processing function", name = "info.log")
 
-mclapply(chunk_list, parallel_boot, mc.preschedule = FALSE)
 
 ftime <- proc.time() - stime
 
