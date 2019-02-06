@@ -388,14 +388,13 @@ main_model_fn <- function(ship_imo_tbl, param_grid, A_mat, ports_pop, ...) {
   port_compentency_prob <- param_grid[["port_compentency_prob"]]
 
   # Get sequence of datetimes in POSIXct format
-  dateseq <- seq(from = as.POSIXct("2009-11-16 00:00:00", tz = "GMT",
-      origin = "1970-01-01"),
-    to = as.POSIXct("2014-11-16 00:00:00", tz = "GMT",
-      origin = "1970-01-01"), by = "6 hours")
+  dateseq <- seq(from = as.POSIXct("2010-01-01 00:00:00", tz = "UTC"),
+    to = as.POSIXct("2017-12-31 18:00:00", tz = "UTC") + (6 * 3600),
+    by = '6 hours')
 
   # date to set life-history time lag limit
-  date_pastend <- as.POSIXct("2014-11-17 00:00:00", tz = "GMT",
-    origin = "1970-01-01")
+  
+  date_pastend <- dateseq[length(dateseq)] + (24 * 3600)
 
   # Create list of date chunks in order to figure out which bootstrap chunks to
   # pull out

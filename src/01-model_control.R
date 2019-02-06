@@ -137,7 +137,6 @@ full_date_list <- format(seq(from = as.POSIXct("2010-01-01 00:00:00",
   by = "6 hours"), format = "%Y-%m-%d %H:%M:%S")
 
 # Cycle through bootstrap population loops
-boot_iter <- as.numeric(params[2])
 
 boot_iter <- 1
 
@@ -147,12 +146,7 @@ boot_directory <- file.path(root_dir(), "data",
 flog.info("boot directory: %s", boot_directory,  name = "model_progress.log")
 
 # Get ship imo info, ships_array and ports_array (population arrays)
-ship_ports_filelist <- list.files(path = boot_directory,
-  pattern = "ships_ports*", full.names = TRUE, recursive = TRUE)
-
-ships_and_ports <- readRDS(ship_ports_filelist[[1]])
-
-ship_imo_tbl <- ships_and_ports[[1]]
+ship_imo_tbl <- readRDS(file.path(boot_directory, "ship_imo_tbl.rds"))
 
 # Set the effective wsa for ships to be 10% of the wetted surface area
 effective_wsa_scale <- 0.1
@@ -160,13 +154,13 @@ ship_imo_tbl[["effective_wsa"]] <- ship_imo_tbl[["wsa"]] * effective_wsa_scale
 
 summary(ship_imo_tbl$effective_wsa)
 
-ships_pop_temp <- ships_and_ports[[2]] # 5085 rows (ships), \
-# 7305 columns (time steps)
-ports_pop_temp <- ships_and_ports[[3]] # 7305 rows (time steps),
-# 1191 columns (ports)
+ships_pop_temp <- readRDS(file.path(boot_directory, "ships_array.rds"))
+ # 5085 rows (ships), # 7305 columns (time steps)
+ports_pop_temp <- readRDS(file.path(boot_directory, "ports_array.rds")) 
+# 7305 rows (time steps), 1191 columns (ports)
 
-ships_instant_mortality <- ships_and_ports[[2]]
-ports_instant_mortality <- ships_and_ports[[3]]
+ships_instant_mortality <- ships_pop_temp
+ports_instant_mortality <- ports_pop_temp
 
 # Make sure the ports_pop_temp matrix names are in the right order
 dimnames(ports_pop_temp)[[2]] <- sort(dimnames(ports_pop_temp)[[2]])
@@ -229,8 +223,9 @@ sourceCpp(file.path(root_dir(), "src", "popgrow.cpp"), verbose = FALSE)
 sourceCpp(file.path(root_dir(), "src", "stoch_pop_growth.cpp"), verbose = FALSE)
 
 # Pass parameters to model based on arguments supplied to Rscript
-param_iter <- as.numeric(params[1])
+#param_iter <- as.numeric(params[1])
 
+ param_iter <- 1
   # Add a dimension for the number of life stages in the population
 ships_pop <- ships_array_add(ships_pop_temp,
   lifestages = ship_to_port_lifestages)
