@@ -14,6 +14,7 @@ library("readr")
 library("futile.logger")
 library("rprojroot")
 library("keyring")
+library("mice")
 library("rhelpers")
 
 root_crit <- has_dirname("PWS_2_5_west_coast_model", subdir = "src")
@@ -26,8 +27,6 @@ flog.appender(appender.console(), name = "info.log")
 flog.threshold(INFO, name = "info.log")
 
 flog.info("Beginning loading and munging data", name = "info.log")
-
-ptm <- proc.time()  # Start program time
 
 # Custom "not-in" function
 `%nin%` <- Negate(`%in%`)
@@ -81,7 +80,7 @@ port_data <- port_data_full %>%
 
 saveRDS(port_data, file.path(root_dir(), "data", "ports_data.rds"))
 
-DBI::dbDisconnect(ship_con)
+try(DBI::dbDisconnect(ship_con))
 
 # ship movement ---------------------------------------------------------------
 # Ports blacklist to exclude from analysis
@@ -152,21 +151,25 @@ nbic_con <-
     password = key_get("nbic_analysis_test")
   )
 
-wsa_calc_qry <- "SELECT
+wsa_calc_qry <- "SELECT 
     IMO_No AS LRNOIMOShipNo,
+    Depth,
+    Draft,
+    LOA,
     GT,
     Dwt,
     TEU,
     Nrt,
     Speed,
-    Main_Vessel_Type
+    Main_Vessel_Type,
+    Sub_Type
 FROM
     IHS_Fairplay"
 
 wsa_df <- tbl(nbic_con, sql(wsa_calc_qry)) %>%
   collect(n = Inf)
 
-DBI::dbDisconnect(nbic_con)
+try(DBI::dbDisconnect(nbic_con))
 
 # Add to existing data
 ship_raw_tbl <-
@@ -221,13 +224,18 @@ ship_movement_raw_tbl <- dtplyr::tbl_dt(
       Longitude = PortLongitudeStd,
       LRNOIMOShipNo,
       ShipType,
+      Sub_Type,
       ArrivalID,
       ArrivalDateFullStd,
       SailDateFullStd,
       sameport_id,
       wsa,
       GT,
-      Nrt
+      Nrt,
+      Depth,
+      Draft,
+      LOA,
+      Dwt
     )
 )
 
@@ -240,7 +248,7 @@ ship_movement_raw_tbl <- dtplyr::tbl_dt(
 ship_imo_temp_tbl <-
   ship_movement_raw_tbl %>%
   group_by(LRNOIMOShipNo) %>%
-  select(ShipType, wsa, GT, Nrt) %>%
+  select(ShipType, Sub_Type, wsa, GT, Nrt, Depth, Draft, LOA, Dwt) %>%
   unique()
   
 ship_imo_temp_tbl <- ship_imo_temp_tbl %>%
@@ -249,12 +257,11 @@ ship_imo_temp_tbl <- ship_imo_temp_tbl %>%
 flog.info("Begin multiple imputation to fill in missing WSA", name = "info.log")
 
 # Use multiple imputation for missing wsa values
-library("mice")
 
 imp_sub_tbl <- ship_imo_temp_tbl
 imp_sub_tbl$LRNOIMOShipNo <- NULL
-imp <- mice(imp_sub_tbl, meth = "rf")
-imp_df <- mice::complete(imp, 1)
+imp <- mice(imp_sub_tbl, meth = "rf", m = 1)
+imp_df <- mice::complete(imp)
 
 ## Use this table below for ship information in the model
 ship_imo_tbl <-

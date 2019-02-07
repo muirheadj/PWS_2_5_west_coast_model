@@ -383,7 +383,7 @@ main_model_fn <- function(ship_imo_tbl, param_grid, A_mat, ports_pop, ...) {
   mature_lag <- param_grid[["mature_lag"]]
   repro_lag <- param_grid[["repro_lag"]]
   fw_reduction <- param_grid[["fw_reduction"]]
-  seed_bioregions <- param_grid[["seed_bioregions"]]
+  seed_bioregions <- unlist(param_grid[["seed_bioregions"]])
   ship_port_prob <- param_grid[["ship_port_prob"]]
   port_compentency_prob <- param_grid[["port_compentency_prob"]]
 
@@ -535,17 +535,17 @@ for (t_global in seq_along(date_list_ext)){
 
       port_lifehistory_status[port_lifehistory_status$name %in% seed_ports,
         "larval_time"] <-
-        as.POSIXct("2009-11-16 00:00:00", tz = "GMT", origin = "1970-01-01")
+        as.POSIXct("2009-11-16 00:00:00", tz = "UTC", origin = "1970-01-01")
 
       port_lifehistory_status[port_lifehistory_status$name %in% seed_ports,
         "juvenile_time"] <-
-        as.POSIXct("2009-11-16 00:00:00", tz = "GMT", origin = "1970-01-01")
+        as.POSIXct("2009-11-16 00:00:00", tz = "UTC", origin = "1970-01-01")
       port_lifehistory_status[port_lifehistory_status$name %in% seed_ports,
         "mature_time"] <-
-        as.POSIXct("2009-11-16 00:00:00", tz = "GMT", origin = "1970-01-01")
+        as.POSIXct("2009-11-16 00:00:00", tz = "UTC", origin = "1970-01-01")
       port_lifehistory_status[port_lifehistory_status$name %in% seed_ports,
         "reprod_time"] <-
-        as.POSIXct("2009-11-16 00:00:00", tz = "GMT", origin = "1970-01-01")
+        as.POSIXct("2009-11-16 00:00:00", tz = "UTC", origin = "1970-01-01")
     }
 
     # Update time lag for larval development time if larvae present in
@@ -625,7 +625,6 @@ for (t_global in seq_along(date_list_ext)){
       reprod_invaded_ship_names &
       ship_lifehistory_status$reprod_time == date_pastend), "reprod_time"] <-
     t_reproduce
-
 
     port_lifehistory_status[(port_lifehistory_status$name %nin%
       reprod_invaded_port_names & port_lifehistory_status$name %nin%
@@ -790,11 +789,7 @@ for (t_global in seq_along(date_list_ext)){
       temp_ports_pop[, temp_ports_pop[, ] <= 2] <- 0
 
       stopifnot(!is.null(dimnames(temp_ports_pop)[[2]]))
-
-      # Panama Canal populations always get reduced to 0
-      temp_ports_pop[, dimnames(temp_ports_pop)[[2]] %in% "Panama Canal"] <- 0 *
-        temp_ports_pop[, dimnames(temp_ports_pop)[[2]] %in% "Panama Canal"]
-
+   
     } else {
       # In the first time slice, so no t-1 time position
       temp_ports_pop <- ports_pop[t_global, , ]
@@ -894,7 +889,7 @@ param <- list(parameter = paste0("parameter", sprintf("%.03d", param_iter)),
   port_area = port_area,
   K_ports = K_ports,
   fw_reduction = fw_reduction,
-  seed_bioregions = seed_bioregions,
+  seed_bioregions = list(seed_bioregions),
   max_density_individuals  = max_density_individuals,
   larval_dev_lag = larval_dev_lag,
   mature_lag = mature_lag,

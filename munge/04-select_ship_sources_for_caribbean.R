@@ -4,7 +4,7 @@
 # 
 # Author: jmuirhead
 ###############################################################################
-library(abind)
+library("abind")
 
 ships_array_add <- function(ships_pop_input, lifestages){
   # This function takes the ships_array generated at the bootstrapping stage

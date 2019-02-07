@@ -5,8 +5,6 @@
 # Author: jmuirhead
 ###############################################################################
 
-params <- commandArgs(trailingOnly = TRUE)
-
 suppressMessages(TRUE)
 
 library("methods")
@@ -28,8 +26,6 @@ library("rprojroot")
  
 root_crit <- has_dirname("PWS_2_5_west_coast_model", subdir = "src")
 root_dir <- root_crit$make_fix_file()
-
-root_dir()
 
 options(tibble.width = Inf)
 
@@ -108,7 +104,7 @@ repro_lag <- (14 * 24 * 60 * 60) # McDonald et al 2009: 10 weeks post-settlement
 
 
 # Identify seed bioregions
-seed_bioregions <- c("NEA-II", "NWP-2")
+seed_bioregions <- list("NEP-IV", "NEP-V", "NEP-VI")
 
 # Define port area in square meters
 port_area <- 1e+07 # 312 times larger than max wsa for ships, 1546 times larger
@@ -130,14 +126,17 @@ parameter_grid <- expand.grid(port_area = port_area,
 	ship_port_prob =  1.0,
 	port_compentency_prob = 1.0,
   stringsAsFactors = FALSE)
+  
+ parameter_grid <- parameter_grid %>%
+ 		tidyr::nest(seed_bioregions, .key = "seed_bioregions")
 
 # Re-assign date_list_ext
 full_date_list <- format(seq(from = as.POSIXct("2010-01-01 00:00:00",
-  tz = "UTC"), to = as.POSIXct("2018-12-31 18:00:00", tz = "UTC"),
-  by = "6 hours"), format = "%Y-%m-%d %H:%M:%S")
+      tz = "UTC"),
+    to = as.POSIXct("2017-12-31 18:00:00", tz = "UTC"),
+    by = '6 hours'), format = "%Y-%m-%d %H:%M:%S")
 
 # Cycle through bootstrap population loops
-
 boot_iter <- 1
 
 boot_directory <- file.path(root_dir(), "data",
@@ -191,7 +190,7 @@ seed_ports_fn <- function(param, ports_pop_input, lifestages){
               port_data[["PortStd"]]) == TRUE, name = "model_progress.log")
 
   seed_ports <- port_data[port_data$REG_LRGGEO %in%
-      param[, "seed_bioregions"] &
+      unlist(param[, "seed_bioregions"]) &
       port_data$PortStd %in% dimnames(ports_pop_input)[[3]], ] %>%
     arrange(PortStd)
 
@@ -223,9 +222,8 @@ sourceCpp(file.path(root_dir(), "src", "popgrow.cpp"), verbose = FALSE)
 sourceCpp(file.path(root_dir(), "src", "stoch_pop_growth.cpp"), verbose = FALSE)
 
 # Pass parameters to model based on arguments supplied to Rscript
-#param_iter <- as.numeric(params[1])
+param_iter <- 1
 
- param_iter <- 1
   # Add a dimension for the number of life stages in the population
 ships_pop <- ships_array_add(ships_pop_temp,
   lifestages = ship_to_port_lifestages)
