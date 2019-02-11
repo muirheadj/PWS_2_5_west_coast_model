@@ -80,7 +80,7 @@ port_data <- port_data_full %>%
 
 saveRDS(port_data, file.path(root_dir(), "data", "ports_data.rds"))
 
-try(DBI::dbDisconnect(ship_con))
+try(DBI::dbDisconnect(ship_con), silent = TRUE)
 
 # ship movement ---------------------------------------------------------------
 # Ports blacklist to exclude from analysis
@@ -95,7 +95,7 @@ ports_blacklist <- c(
   "Panama Pacific Lightering Area (PANPAC)"
 )
 
-ships_blacklist <- c("Military", "Combo", "Other")
+ships_blacklist <- c("Military", "Combo")
 
 # Change dates and times to POSIXct format
 datetype_grep <-
@@ -153,9 +153,11 @@ nbic_con <-
 
 wsa_calc_qry <- "SELECT 
     IMO_No AS LRNOIMOShipNo,
+    Beam,
     Depth,
     Draft,
     LOA,
+    LBP,
     GT,
     Dwt,
     TEU,
@@ -169,49 +171,52 @@ FROM
 wsa_df <- tbl(nbic_con, sql(wsa_calc_qry)) %>%
   collect(n = Inf)
 
-try(DBI::dbDisconnect(nbic_con))
+try(DBI::dbDisconnect(nbic_con), silent = TRUE)
 
 # Add to existing data
 ship_raw_tbl <-
-  left_join(ship_raw_tbl, wsa_df, by = "LRNOIMOShipNo") %>%
-  rename(ShipType = NBIC_ShipType)
+  left_join(ship_raw_tbl, wsa_df, by = "LRNOIMOShipNo")
+  
 
 # Calculate wetted surface area depending on ship type
-wsa_calc_fn <- function(x, y) {
-  z <- NA_real_
-  if (!is.na(y)) {
-    if (x == "Bulker")
-      z <- 26.487 * y ^ 0.606
-    if (x == "Tanker")
-      z <- 29.614 * y ^ 0.601
-    if (x == "Passenger")
-      z <- 21.956 * y ^ 0.584
-    if (x == "Container")
-      z <-  8.073 * y ^ 0.645
-    if (x == "RoRo")
-      z <- 39.628 * y ^ 0.54
-    if (x == "General Cargo")
-      z <- 26.15 * y ^ 0.587
-    if (x == "Other")
-      z <- 34.16 * y ^ 0.576
-    if (x == "Combo")
-      z <- 34.16 * y ^ 0.576
-    if (x == "Reefer")
-      z <- 34.16 * y ^ 0.576
-    if (x == "Tug")
-      z <- 34.16 * y ^ 0.576
-    if (x == "Offshore Supply Vessel")
-      z <- 34.16 * y ^ 0.576
-    if (x == "Recreational")
-      z <- 15
+wsa_calc_fn <- function(NBIC_ShipType, Sub_Type, Nrt, LBP, Draft, Beam) {
+  wsa <- NA_real_
+  if (!is.na(Nrt)) {
+    if (NBIC_ShipType == "Bulker")
+      wsa <- 26.487 * Nrt ^ 0.606
+    if (NBIC_ShipType == "Tanker")
+      wsa <- 29.614 * Nrt ^ 0.601
+    if (NBIC_ShipType == "Passenger")
+      wsa <- 21.956 * Nrt ^ 0.584
+    if (NBIC_ShipType == "Container")
+      wsa <-  8.073 * Nrt ^ 0.645
+    if (NBIC_ShipType == "RoRo")
+      wsa <- 39.628 * Nrt ^ 0.54
+    if (NBIC_ShipType == "General Cargo")
+      wsa <- 26.15 * Nrt ^ 0.587
+    if (NBIC_ShipType == "Barge" | Sub_Type == "Oil Barge")
+      wsa <- LBP * (2 * Draft + Beam)
+    if (NBIC_ShipType == "Other" & Sub_Type != "Oil Barge")
+      wsa <- 34.16 * Nrt ^ 0.576
+    if (NBIC_ShipType == "Combo")
+      wsa <- 34.16 * Nrt ^ 0.576
+    if (NBIC_ShipType == "Reefer")
+      wsa <- 34.16 * Nrt ^ 0.576
+    if (NBIC_ShipType == "Tug")
+      wsa <- 34.16 * Nrt ^ 0.576
+    if (NBIC_ShipType == "Offshore SupplNrt Vessel")
+      wsa <- 34.16 * Nrt ^ 0.576
+    if (NBIC_ShipType == "Recreational")
+      wsa <- 15
+
   }
-  z
+  wsa
 }
 
-
+# FIXME
 ship_raw_tbl <-
   ship_raw_tbl %>%
-  mutate(wsa = purrr::map2_dbl(ShipType, Nrt, wsa_calc_fn))
+  mutate(wsa = purrr::pmap_dbl(list(NBIC_ShipType, Sub_Type, Nrt, LBP, Draft, Beam), wsa_calc_fn))
 
 # Filter out bad ships than are drive-bys (must spend at least 1/2 hour in ports)
 ship_movement_raw_tbl <- dtplyr::tbl_dt(
@@ -223,7 +228,7 @@ ship_movement_raw_tbl <- dtplyr::tbl_dt(
       Latitude = PortLatitudeStd,
       Longitude = PortLongitudeStd,
       LRNOIMOShipNo,
-      ShipType,
+      ShipType = NBIC_ShipType,
       Sub_Type,
       ArrivalID,
       ArrivalDateFullStd,
@@ -297,7 +302,8 @@ datetimes_split <- purrr::map(datetimes_idx_chunks, function(x) datetime_df[x, ]
 # intervals
 
 ship_raw_tbl <- ship_movement_raw_tbl %>%
-  mutate(ArrivalDateFullStd = ArrivalDateFullStd + 1) %>%
+  mutate(SailDateFullStd = as.POSIXct(ArrivalDateFullStd, tz = "UTC"),
+  ArrivalDateFullStd = as.POSIXct(ArrivalDateFullStd, tz = "UTC") + 1) %>%
   mutate(arr_time_idx = findInterval(ArrivalDateFullStd,
       datetime_df[["datetime"]]),
     sail_time_idx = findInterval(SailDateFullStd,
