@@ -209,10 +209,14 @@ ship_immigration_fn <- function(ships_pop,
     # relative surface area
     # frac_transferred is the random proportion that is able to be transferred
     # to the ship
+    
+    
+### CHECK ON THIS
 
       port_to_ship_migration_proportion <- port_ship_migration %>%
-      left_join(ship_imo_tbl, by = c(ships = "LRNOIMOShipNo")) %>%
-      select(-GT, -Nrt) %>% group_by(ports) %>%
+      left_join(ship_imo_tbl, by = c(ships = "lrnimoshipno")) %>%
+      select(-GT, -Nrt) %>%
+      group_by(ports) %>%
       mutate(frac_transferred = rbinom(1, size = 1000, prob = 0.04) / 1000) %>%
       mutate(wsa_scale = effective_wsa / sum(effective_wsa, port_area,
         na.rm = TRUE)) %>%
@@ -291,7 +295,7 @@ port_juvenile_production_fn <- function(ports_pop,
     # to the ship
 
      port_port_juvenile_proportion <- port_port_juve_production %>%
-       left_join(ship_imo_tbl, by = c(ships = "LRNOIMOShipNo")) %>%
+       left_join(ship_imo_tbl, by = c(ships = "lrnoimoshipno")) %>%
        select(-GT, -Nrt) %>%
        group_by(ports) %>%
        mutate(wsa_scale = port_area / sum(effective_wsa, port_area,
@@ -312,7 +316,6 @@ port_juvenile_production_fn <- function(ports_pop,
        melt(value.name = "pop", id.vars = "ports") %>%
        acast(variable ~ ports, value.var = "pop",
          fun.aggregate = function (x) mean(x, na.rm = TRUE), drop = TRUE)
-
     }
   }
 
@@ -376,7 +379,7 @@ ship_immigration <- array(0, dim = dim(ships_pop),
 main_model_fn <- function(ship_imo_tbl, param_grid, A_mat, ports_pop, ...) {
 
   port_area <- param_grid[["port_area"]]
-  K_ports <- param_grid[["K_ports"]]
+  k_ports <- param_grid[["k_ports"]]
   max_density_individuals <- param_grid[["max_density_individuals"]]
   larval_dev_lag <- param_grid[["larval_dev_lag"]]
   juvenile_lag <- param_grid[["juvenile_lag"]]
@@ -407,22 +410,22 @@ main_model_fn <- function(ship_imo_tbl, param_grid, A_mat, ports_pop, ...) {
 # Array to store ship specific probability of infecting ports
   ship_imo_tbl[["wsa_prob"]] <- ship_port_prob
   ships_invasion_prob <- ship_imo_tbl[["wsa_prob"]]
-  names(ships_invasion_prob) <- ship_imo_tbl[["LRNOIMOShipNo"]]
+  names(ships_invasion_prob) <- ship_imo_tbl[["lrnoimoshipno"]]
 
 
   # Calculate the effective carrying capacity for each vessel based on 10000
   # individuals per square meter (5000 juveniles + 5000 adults)
 
-  ship_imo_tbl[["K_ships"]] <- ship_imo_tbl[["effective_wsa"]] *
+  ship_imo_tbl[["k_ships"]] <- ship_imo_tbl[["effective_wsa"]] *
     max_density_individuals
 
   # Set up a matrix for the carrying capacity for each vessel
-  K_ships <- matrix(data = rep(ship_imo_tbl[["K_ships"]],
+  k_ships <- matrix(data = rep(ship_imo_tbl[["k_ships"]],
           each = length(ship_to_port_lifestages)), nrow = 4)
 
 
   # Generate hybrid indicies to read the ff arrays
-  hi_ship <- 1:dim(K_ships)[2]  # Index for ships
+  hi_ship <- 1:dim(k_ships)[2]  # Index for ships
   hi_port <- 1:dim(ports_pop)[3]  # Index for ports
   hi_t1 <- 1:100  # Index for time slices 1:100
   hi_t2 <- 101:200  # Index for time slices 101:200
@@ -540,9 +543,11 @@ for (t_global in seq_along(date_list_ext)){
       port_lifehistory_status[port_lifehistory_status$name %in% seed_ports,
         "juvenile_time"] <-
         as.POSIXct("2009-11-16 00:00:00", tz = "UTC", origin = "1970-01-01")
+        
       port_lifehistory_status[port_lifehistory_status$name %in% seed_ports,
         "mature_time"] <-
         as.POSIXct("2009-11-16 00:00:00", tz = "UTC", origin = "1970-01-01")
+        
       port_lifehistory_status[port_lifehistory_status$name %in% seed_ports,
         "reprod_time"] <-
         as.POSIXct("2009-11-16 00:00:00", tz = "UTC", origin = "1970-01-01")
@@ -774,7 +779,7 @@ for (t_global in seq_along(date_list_ext)){
       }
 
       # Apply carrying capacity upper limit
-      ports_logit_factor <- (K_ports - N_ports) / K_ports
+      ports_logit_factor <- (k_ports - N_ports) / k_ports
 
       # Larva and cyprids don't have a carrying capacity
       ports_logit_factor[which(dimnames(ports_logit_factor)[[1]] %in%
@@ -836,7 +841,7 @@ for (t_global in seq_along(date_list_ext)){
       dimnames(N_ships) <- list(dimnames(ships_pop)[[2]],
         dimnames(ships_pop)[[3]])
 
-      ships_logit_factor <- (K_ships - N_ships) / K_ships
+      ships_logit_factor <- (k_ships - N_ships) / k_ships
 
       ships_logit_factor[which(dimnames(ships_logit_factor)[[1]] %in%
         c("larva", "cyprid")), ] <- 1
@@ -887,7 +892,7 @@ for (t_global in seq_along(date_list_ext)){
 # Save data
 param <- list(parameter = paste0("parameter", sprintf("%.03d", param_iter)),
   port_area = port_area,
-  K_ports = K_ports,
+  k_ports = k_ports,
   fw_reduction = fw_reduction,
   seed_bioregions = list(seed_bioregions),
   max_density_individuals  = max_density_individuals,

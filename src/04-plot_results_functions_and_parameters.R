@@ -26,17 +26,7 @@ custom_cols <- c("#7D0112FF", "#A14C26FF", "#C17F45FF", "#DAAE6DFF",
   "#EBD79CFF", "#440154FF", "#414487FF", "#2A788EFF", "#22A884FF", "#7AD151FF")
 
 # Print out of color palette
-cols_sample <- data_frame(custom_cols, barlength = 1)
-
-cols_sample_plot <- ggplot(cols_sample,
-    aes(barlength, barlength, fill = custom_cols)) +
-  geom_col() +
-  coord_flip() +
-  scale_fill_manual(values = custom_cols) +
-  theme_void()
-
-cowplot::save_plot(file.path(figures_dir, "sample_cols.pdf"),
-  plot = cols_sample_plot, scale = 0.95)
+cols_sample <- tibble(custom_cols, barlength = 1)
 
 # Define max image width
 col_1_wide <- 8.7 # in cm
@@ -222,9 +212,9 @@ list_process_df_fn <- function(x){
 
   x_temp[["Time"]] <- fasttime::fastPOSIXct(x_temp[["Var1"]], tz = "UTC")
 
-  names(x_temp) <- c("Date", "Lifestage", "Location", "Population", "Time")
+  names(x_temp) <- c("date", "lifestage", "location", "population", "time")
 
-  x_temp[["Lifestage"]] <- factor(x_temp[["Lifestage"]],
+  x_temp[["lifestage"]] <- factor(x_temp[["lifestage"]],
       levels = c("larva", "cyprid", "juvenile", "adult"))
   x_temp[["parameter"]] <- attr(x, "parameter")
   x_temp[["bootstrap"]] <- attr(x, "bootstrap")
@@ -256,15 +246,15 @@ process_ports_fn <- function(i){
   
   # Note: as.Date assumes that the TZ is "UTC"
   ports_longformat_with_coords <- list_process_df_fn(ports_temp_subset) %>%
-    left_join(port_data, by = c("Location" = "PortStd")) %>%
+    left_join(port_data, by = c("location" = "port")) %>%
     left_join(parameters_df, by = "parameter") %>%
-    mutate(date = as.Date(Time),
-      seed_port = if_else(REG_LRGGEO == seed_bioregion, "Source port",
-        "Caribbean port")) %>%
-    select(bootstrap, parameter, REG_LRGGEO, location = Location,
-      port_country = Port_Country, PortLatitudeStd, PortLongitudeStd, seed_port,
-      lifestage = Lifestage, date, date_and_time = Time,
-      population = Population) %>%
+    mutate(date = as.Date(time),
+      seed_port = if_else(reg_lrggeo == seed_bioregion, "source port",
+        "non-source port")) %>%
+    select(bootstrap, parameter, bioregion, location,
+      port_country, lat, lon, seed_port,
+      lifestage, date, date_and_time,
+      population) %>%
     as_tibble() %>%
     ungroup()
 
@@ -283,21 +273,21 @@ process_ports_fn <- function(i){
 # Calculate mean daily population size for CAR-I to CAR-VI ports. Include
 # ports with 0 population, but exclude the Panama Canal.
 
-  caribbean_ports_daily_mean <- ports_longformat_with_coords %>%
-    filter(seed_port == "Caribbean port",
-      REG_LRGGEO %in% caribbean_bioregions, location != "Panama Canal") %>%
+  destination_ports_daily_mean <- ports_longformat_with_coords %>%
+    filter(seed_port == "non-seed port",
+      bioregion %in% caribbean_bioregions, location != "Panama Canal") %>%
     group_by(date, parameter, bootstrap, lifestage, location, port_country,
-      REG_LRGGEO, PortLatitudeStd, PortLongitudeStd) %>%
+      bioregion, lat, lon) %>%
     summarize(mean_population = mean(population),
       log10population = log10p(mean(population))) %>%
     ungroup()
 
 # Save daily values for each port
-  saveRDS(caribbean_ports_daily_mean,
-    file = save_results_filename("caribbean_ports_daily_mean_", param_label))
+  saveRDS(destination_ports_daily_mean,
+    file = save_results_filename("destination_ports_daily_mean_", param_label))
 
 # Calculate summary statistics for all ports, including those with 0 population
-  all_ports_mean <- caribbean_ports_daily_mean %>%
+  all_ports_mean <- destination_ports_daily_mean %>%
     group_by(date, parameter, bootstrap, lifestage) %>%
     summarise(n = n(), ports_sum = sum(mean_population),
       ports_mean = mean(mean_population),
@@ -315,7 +305,7 @@ process_ports_fn <- function(i){
 
 # Calculate summary statistics for just invaded ports
 
-  invaded_ports_mean <- caribbean_ports_daily_mean %>%
+  invaded_ports_mean <- destination_ports_daily_mean %>%
     filter(mean_population > 0) %>%
     group_by(date, parameter, bootstrap, lifestage) %>%
     summarise(n = n(), ports_sum = sum(mean_population),
@@ -335,7 +325,7 @@ process_ports_fn <- function(i){
 
 # Calculate number and proportion of invaded ports
 
-  invaded_ports_count <- caribbean_ports_daily_mean %>%
+  invaded_ports_count <- destination_ports_daily_mean %>%
     filter(mean_population > 0) %>%
     group_by(date, parameter, bootstrap, lifestage) %>%
     summarize(n_carI_ports, n_invaded_ports = n_distinct(location),
@@ -345,7 +335,7 @@ process_ports_fn <- function(i){
   saveRDS(invaded_ports_count,
     file = save_results_filename("caribbean_ports_count_", param_label))
 
-  invaded_ports_pooled_lifestages_count <- caribbean_ports_daily_mean %>%
+  invaded_ports_pooled_lifestages_count <- destination_ports_daily_mean %>%
     filter(mean_population > 0) %>%
     group_by(date, parameter, bootstrap) %>%
     summarize(n_carI_ports, n_invaded_ports = n_distinct(location),
@@ -381,10 +371,10 @@ process_port_immigration_fn <- function(i) {
     left_join(port_data, by = c("Location" = "PortStd")) %>%
     left_join(parameters_df, by = "parameter") %>%
     mutate(date = as.Date(Time), seed_port =
-      if_else(REG_LRGGEO == seed_bioregion,
+      if_else(bioregion == seed_bioregion,
         "Source port", "Caribbean port")) %>%
-    select(bootstrap, parameter, REG_LRGGEO, location = Location,
-      port_country = Port_Country, PortLatitudeStd, PortLongitudeStd, seed_port,
+    select(bootstrap, parameter, bioregion, location = Location,
+      port_country = Port_Country, lat, lon, seed_port,
       lifestage = Lifestage, date, date_and_time = Time,
       population = Population) %>%
     as_tibble() %>%
@@ -395,10 +385,10 @@ process_port_immigration_fn <- function(i) {
   # Calculate population size. Note: Exclude Panama Canal from immigration
   # calculations
   port_immigration_daily_mean <- ports_immigration_with_coords %>%
-    filter(seed_port == "Caribbean port", REG_LRGGEO %in% caribbean_bioregions,
+    filter(seed_port == "Caribbean port", bioregion %in% caribbean_bioregions,
       location != "Panama Canal") %>%
     group_by(date, parameter, bootstrap, lifestage, location, port_country,
-      REG_LRGGEO, PortLatitudeStd, PortLongitudeStd) %>%
+      bioregion, lat, lon) %>%
     summarize(mean_population = mean(population, na.rm = TRUE),
       log10population = log10p(mean(population, na.rm = TRUE))) %>%
     ungroup()
@@ -453,7 +443,7 @@ process_instant_mortality_fn <- function(mort_mat){
   temp3 <- temp2 %>%
   left_join(port_data, by = c("location" = "PortStd")) %>%
   left_join(parameters_df, by = "parameter") %>%
-  mutate(seed_port = if_else(REG_LRGGEO == seed_bioregion,
+  mutate(seed_port = if_else(bioregion == seed_bioregion,
     "Source port", "Caribbean port"))
 
   param_label <- paste(unique(temp2[["bootstrap"]]),
@@ -626,9 +616,9 @@ port_mortality_summary_fn <- function(i, ports_instant_mortality_list){
   ports_zero_pop_names_df <- graph_data_preprocessing(
       sprintf("caribbean_ports_daily_mean_parameter%0.3d", i)) %>%
     group_by(bootstrap, `Source; FW reduction`, date, location,
-      REG_LRGGEO) %>%
+      bioregion) %>%
     summarise(total_population = sum(mean_population, na.rm = TRUE)) %>%
-    filter(total_population == 0, REG_LRGGEO %in% caribbean_bioregions,
+    filter(total_population == 0, bioregion %in% caribbean_bioregions,
       location != "Panama Canal") %>%
     select(bootstrap, `Source; FW reduction`, date, location) %>%
     unique() %>%
@@ -638,7 +628,7 @@ port_mortality_summary_fn <- function(i, ports_instant_mortality_list){
 
   ports_instant_mortality_temp_df <- ports_instant_mortality_df_sub %>%
     # include only caribbean ports and not the Panama Canal
-    filter(REG_LRGGEO %in% caribbean_bioregions,
+    filter(bioregion %in% caribbean_bioregions,
       seed_port == "Caribbean port", location != "Panama Canal") %>%
     # include only ports that have a zero total population on that date
     right_join(ports_zero_pop_names_df,

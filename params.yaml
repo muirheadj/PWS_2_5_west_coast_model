@@ -1,0 +1,21 @@
+author: J. Muirhead
+params:
+  choices:
+    - coastwise
+    - all_traffic
+  scenario: all_traffic
+  seed_bioregions: 
+    - NEP-IV
+    - NEP-V
+    - NEP_VI
+  port_area: 1.0e+07
+  max_density_individuals: 5.0e+3
+  fw_reduction: 0.0
+  larval_dev_lag: 604800
+  juvenile_lag: 86400
+  mature_lag: 5184000
+  repro_lag: 1209600
+  ship_port_prob: 1.0
+  port_comptency_prob: 1.0
+  boot_iter: 1
+  effective_wsa_scale: 0.1

@@ -29,6 +29,10 @@ root_dir <- root_crit$make_fix_file()
 
 options(tibble.width = Inf)
 
+# Imput model parameters from YAML file
+
+yaml_params <- yaml::read_yaml(file.path(root_dir(), "params.yaml"))
+
 # Helper functions
 chunkr <- function(vec, chunk_size = NULL, n_chunks = NULL,
 	use_bit_package = FALSE){
@@ -97,35 +101,37 @@ port_to_ship_lifestages <- c("larva" = 0, "cyprid" = 1, "juvenile" = 0,
    names(ship_to_port_lifestages)
 
 # Reproductive and development time lag in seconds
-larval_dev_lag <- (7 * 24 * 60 * 60) # 7 days until cyprids can appear
-juvenile_lag <- (1 * 24 * 60  * 60) # 1 day until juveniles can first appear after cyprids appear in the population
-mature_lag <- (60 * 24 * 60 * 60) # McDonald et al 2009: 8 weeks post-settlement
-repro_lag <- (14 * 24 * 60 * 60) # McDonald et al 2009: 10 weeks post-settlement
+larval_dev_lag <- yaml_params[["params"]][["larval_dev_lag"]] # 7 days until cyprids can appear
+juvenile_lag <- yaml_params[["params"]][["juvenile_lag"]] # 1 day until juveniles can first appear after cyprids appear in the population
+mature_lag <- yaml_params[["params"]][["mature_lag"]] # McDonald et al 2009: 8 weeks post-settlement
+repro_lag <- yaml_params[["params"]][["repro_lag"]] # McDonald et al 2009: 10 weeks post-settlement
 
 
 # Identify seed bioregions
-seed_bioregions <- list("NEP-IV", "NEP-V", "NEP-VI")
+seed_bioregions <- yaml_params[["params"]][["seed_bioregions"]]
 
 # Define port area in square meters
-port_area <- 1e+07 # 312 times larger than max wsa for ships, 1546 times larger
+port_area <- yaml_params[["params"]][["port_area"]] # 312 times larger than max wsa for ships, 1546 times larger
 # than average ship wsa
 
 # Define carrying capacity per square meter
-max_density_individuals <- 5e+3
+max_density_individuals <- yaml_params[["params"]][["max_density_individuals"]] 
 
 # Generate combination of parameters
-parameter_grid <- expand.grid(port_area = port_area,
-  K_ports = port_area * max_density_individuals,
-  fw_reduction = c(0.0),
-  max_density_individuals = max_density_individuals,
-  larval_dev_lag = larval_dev_lag,
-  juvenile_lag = juvenile_lag,
-  mature_lag = mature_lag,
-  repro_lag = repro_lag,
-  seed_bioregions = seed_bioregions,
-	ship_port_prob =  1.0,
-	port_compentency_prob = 1.0,
-  stringsAsFactors = FALSE)
+parameter_grid <- expand.grid(
+				scenario = yaml_params[["params"]][["choices"]],
+				port_area = port_area,
+    k_ports = port_area * max_density_individuals,
+    fw_reduction = yaml_params[["params"]][["fw_reduction"]],
+    max_density_individuals = max_density_individuals,
+    larval_dev_lag = larval_dev_lag,
+    juvenile_lag = juvenile_lag,
+    mature_lag = mature_lag,
+    repro_lag = repro_lag,
+    seed_bioregions = seed_bioregions,
+	   ship_port_prob = yaml_params[["params"]][["ship_port_prob"]],
+	   port_compentency_prob = yaml_params[["params"]][["port_comptency_prob"]],
+ stringsAsFactors = FALSE)
   
  parameter_grid <- parameter_grid %>%
  		tidyr::nest(seed_bioregions, .key = "seed_bioregions")
@@ -137,39 +143,37 @@ full_date_list <- format(seq(from = as.POSIXct("2010-01-01 00:00:00",
     by = '6 hours'), format = "%Y-%m-%d %H:%M:%S")
 
 # Cycle through bootstrap population loops
-boot_iter <- 1
+boot_iter <- yaml_params[["params"]][["boot_iter"]]
 
-boot_directory <- file.path(root_dir(), "data",
-  sprintf("bootstrap_iter%0.3d", boot_iter))
+data_directory <- file.path(root_dir(), "data", scenario)
 
-flog.info("boot directory: %s", boot_directory,  name = "model_progress.log")
+flog.info("data directory: %s", data_directory,  name = "model_progress.log")
 
 # Get ship imo info, ships_array and ports_array (population arrays)
-ship_imo_tbl <- readRDS(file.path(boot_directory, "ship_imo_tbl.rds"))
+ship_imo_tbl <- readRDS(file.path(data_directory, "ship_imo_tbl.rds"))
 
 # Set the effective wsa for ships to be 10% of the wetted surface area
-effective_wsa_scale <- 0.1
+effective_wsa_scale <- yaml_params[["params"]][["effective_wsa_scale"]]
+
 ship_imo_tbl[["effective_wsa"]] <- ship_imo_tbl[["wsa"]] * effective_wsa_scale
 
 summary(ship_imo_tbl$effective_wsa)
 
-ships_pop_temp <- readRDS(file.path(boot_directory, "ships_array.rds"))
- # 5085 rows (ships), # 7305 columns (time steps)
-ports_pop_temp <- readRDS(file.path(boot_directory, "ports_array.rds")) 
-# 7305 rows (time steps), 1191 columns (ports)
+ships_pop_temp <- readRDS(file.path(data_directory, "ships_array.rds"))
+ports_pop_temp <- readRDS(file.path(data_directory, "ports_array.rds")) 
 
 ships_instant_mortality <- ships_pop_temp
 ports_instant_mortality <- ports_pop_temp
 
 # Make sure the ports_pop_temp matrix names are in the right order
-dimnames(ports_pop_temp)[[2]] <- sort(dimnames(ports_pop_temp)[[2]])
+dimnames(ports_pop_temp)[["port"]] <- sort(dimnames(ports_pop_temp)[["port"]])
 
-dimnames(ports_instant_mortality)[[2]] <-
-  sort(dimnames(ports_instant_mortality)[[2]])
+dimnames(ports_instant_mortality)[["port"]] <-
+  sort(dimnames(ports_instant_mortality)[["port"]])
 
 
 # Get list of bootstrapped ship populations
-boot_filelist <- list.files(path = boot_directory,
+boot_filelist <- list.files(path = data_directory,
   pattern = "chunk[0-9]{3}.rds$", full.names = FALSE, recursive = TRUE)
 
 # Reshape some of the arrays for the population growth model
@@ -177,8 +181,9 @@ source(file.path(root_dir(), "munge", "04-select_ship_sources_for_caribbean.R"))
 
 # Get list of ports in the selected seed bioregion
 
-port_data <- readRDS(file = file.path(root_dir(), "data", "ports_data.rds")) %>%
-  arrange(PortStd)
+port_data <- readRDS(file = file.path(root_dir(), "data", scenario,
+    "ports_data.rds")) %>%
+  arrange(port)
 
 # Setup invasion status (population density of organisms) of initial ports 
 # (ports_array)
@@ -187,16 +192,16 @@ seed_ports_fn <- function(param, ports_pop_input, lifestages){
 
   # Check if port names matches up with the ports_ppop_input
   flog.info("Port name check: %s", all(dimnames(ports_pop_input)[[3]] %in%
-              port_data[["PortStd"]]) == TRUE, name = "model_progress.log")
+              port_data[["port"]]) == TRUE, name = "model_progress.log")
 
-  seed_ports <- port_data[port_data$REG_LRGGEO %in%
+  seed_ports <- port_data[port_data$bioregion %in%
       unlist(param[, "seed_bioregions"]) &
-      port_data$PortStd %in% dimnames(ports_pop_input)[[3]], ] %>%
-    arrange(PortStd)
+      port_data$port %in% dimnames(ports_pop_input)[[3]], ] %>%
+    arrange(port)
 
   n_lifestages <- length(lifestages)
 
-  n_at_carrying_capacity <- param[, "K_ports"]
+  n_at_carrying_capacity <- param[, "k_ports"]
 
   n_at_stability <- c(larva = 3334269129, cyprid = 1000280739,
   	juvenile = 264593012, adult = 416783641)
@@ -205,7 +210,7 @@ seed_ports_fn <- function(param, ports_pop_input, lifestages){
   	  each = dim(ports_pop_input)[1]),
     dim = list(dim(ports_pop_input)[1], length(lifestages), nrow(seed_ports)),
     dimnames = list(dimnames(ports_pop_input)[[1]], names(lifestages),
-      seed_ports[["PortStd"]]))
+      seed_ports[["port"]]))
 
 # Set up some populations in the seed ports
 # Note: This matches the port names from
@@ -237,7 +242,7 @@ source(file.path(root_dir(), "src", "02-main_model.R"))
 # Run main model
 
 model_run <- main_model_fn(ship_imo_tbl, param = parameter_grid[param_iter, ],
-	pop_transition, ports_pop, root_dir(), boot_directory, param_iter, boot_iter,
+	pop_transition, ports_pop, root_dir(), data_directory, param_iter, boot_iter,
     ship_to_port_lifestages, port_to_ship_lifestages, ships_instant_mortality,
     ports_instant_mortality)
 

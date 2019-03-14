@@ -1,26 +1,8 @@
-#!/usr/local/bin/Rscript
-
-"Usage:
-01_create_movement_array_data.R <scenario>
-
-Arguments:
-<scenario>           Required. Enter coastwise or all_ships as the argument.
-
-Options:
-  -h --help          Show this screen." -> doc
-
-
 # This program generates arrays for ship position through time, ship invasion
 # status through time, and port invasion status through time.
 
 # Author: jmuirhead
 ###############################################################################
-
-library("methods")
-library("docopt")
-
-params <- docopt(doc)
-str(params)
 
 library("reshape2")
 library("data.table")
@@ -33,18 +15,30 @@ library("futile.logger")
 library("rprojroot")
 library("keyring")
 library("mice")
-library("rhelpers")
+library("jmhelpers")
 
 root_crit <- has_dirname("PWS_2_5_west_coast_model", subdir = "src")
 root_dir <- root_crit$make_fix_file()
 
 # Read in config file for the different scenarios
-scenario_dir <- params[["scenario"]]
-print(scenario_dir)
+yaml_params <- yaml::read_yaml(file.path(root_dir(), "params.yaml"))
+scenario <- yaml_params[["params"]][["scenario"]]
 
-stop()
+# Make directories for each choice
+create_missing_directories <-  function(x, root) {
+  if (!dir.exists(file.path(root, "data", x))) {
+    dir.create(file.path(root, "data", x), showWarnings = TRUE)
+  }
+}
+
+lapply(yaml_params[["params"]][["choices"]],
+  function(x) create_missing_directories(x, root_dir()))
 
 options(tibble.width = Inf) # Print all columns
+
+
+# Custom functions
+table <- function(x) base::table(x, useNA = "always")
 
 # Set up logging
 flog.appender(appender.console(), name = "info.log")
@@ -63,116 +57,108 @@ ports_con <-
     host = "serc-cg01-new.si.edu",
     dbname = "NBIC_Analysis",
     user = "nbicuser",
-    password = key_get("nbic_analysis_test")
+    password = key_get("nbic_analysis_test", username = "nbicuser")
   )
 
 # Read in from CSV file
-arrivals <-
-  tbl(ports_con, sql("SELECT * FROM panama_caribbean_merged")) %>%
+
+arrivals_qry <- 'SELECT 
+    NBIC_Vessel AS imo_no,
+    Type AS nbic_shiptype,
+    Sub_Type AS sub_type,
+    Transit_Type AS transit_type,
+    Arrival_Port AS arrival_port,
+    Arrival_Bioregion AS arrival_bioregion,
+    Arrival_Lon AS arrival_lon,
+    Arrival_Lat AS arrival_lat,
+    arrival_date AS arrival_date,
+    departure_date AS departure_date,
+    Last_Port AS last_port,
+    Last_Lon AS last_lon,
+    Last_Lat AS last_lat,
+    Last_Bioregion AS last_bioregion
+FROM
+    NVMCws_Arrivals
+WHERE
+    Status = "reviewed" AND
+    Arrival_Coast IN ("ca_west", "West", "Alaska") AND
+	Analysis_year_arrival BETWEEN 2010 AND 2017'
+
+
+arrivals_full <- tbl(ports_con, sql(arrivals_qry)) %>%
   collect(n = Inf)
 
-if (scenario_dir == "coastwise") {
-  arrivals <-
-
+if (scenario == "coastwise") {
+arrivals_full <- arrivals_full %>%
+    filter(transit_type == "Coastwise")
 }
+  
+# Just use the columns on arrivals data. Last port information is required
+# if the last port was on the West Coast, including Canada or Alaska.
 
+arrivals_only <- arrivals_full %>%
+  select(-last_port, -last_lon, -last_lat, -last_bioregion)
 
-port_data_full <- tbl(
-  ports_con,
-  sql(
-    "SELECT DISTINCT
-    Port_ID AS port_id,
-    Port AS port,
-    State AS state,
-    Bioregion AS bioregion,
-    LON AS lon,
-    LAT AS lat
-    FROM
-    ports_tbl
-    WHERE
-    bioregion IN ('NA-S1' , 'NEP-I',
-      'NEP-II',
-      'NEP-III',
-      'NEP-IV',
-      'NEP-V')
-    AND Port NOT IN ('NA-S1' , 'NEP-I',
-      'NEP-II',
-      'NEP-III',
-      'NEP-IV',
-      'NEP-V')
-    ORDER BY port"
-  )
-) %>%
-  collect(n = Inf)
+arrival_ports <- arrivals_full %>%
+  select(port = arrival_port, lon = arrival_lon, lat = arrival_lat,
+  bioregion = arrival_bioregion) %>%
+  unique()
 
-# Filter out ports to just include the ones where there are arrivals
-# in the specified ship population
+# NOTE: Also includes overseas last ports, temporarily
 
-port_data <- port_data_full %>%
-  filter(port %in% arrivals[['PortStd']])
+previous_ports <- arrivals_full %>%
+  select(port = last_port, lon = last_lon, lat = last_lat,
+  bioregion = last_bioregion) %>%
+  unique()
+  
+# Port data includes last ports that are not on the West Coast or Alaska,
+# but are filtered out in the next step
 
-saveRDS(port_data, file.path(root_dir(), "data", scenario_dir,
+port_data <- bind_rows(arrival_ports, previous_ports) %>%
+  unique() %>%
+  filter(bioregion %in% c("NA-S1", "NEP-I", "NEP-II", "NEP-III", "NEP-IV",
+  "NEP-V", "NEP-VI")) %>%
+  arrange(port)
+
+saveRDS(port_data, file.path(root_dir(), "data", scenario,
   "ports_data.rds"))
 
-try(DBI::dbDisconnect(ports_con), silent = TRUE)
 
 # ship movement ---------------------------------------------------------------
 # Ports blacklist to exclude from analysis
 ports_blacklist <- c(
-  "Campeche Escarpment Drilling Block",
-  "Gulfmex Lightering Area No 2",
-  "Kattegat Strait",
-  "Magellan Strait Area",
-  "Ta'Kuntah FSO",
-  "Torres Strait & Great Barrier Reef",
-  "US Gulf Lightering Zones",
-  "Panama Pacific Lightering Area (PANPAC)"
+"Pacific Area Lightering (USA, CA)"
 )
 
 ships_blacklist <- c("Military", "Unknown", "Recreational")
 
 # Change dates and times to POSIXct format
+
 datetype_grep <-
-  grepl("[0-9]{4}[-][0-9]{2}[-][0-9]{2}.*", ship_data[1:5,],
+  grepl("[0-9]{4}[-][0-9]{2}[-][0-9]{2}.*", arrivals_only[1:5,],
     perl = TRUE)
-ship_data[, datetype_grep] <- lapply(ship_data[, datetype_grep],
+    
+arrivals_only[, datetype_grep] <- lapply(arrivals_only[, datetype_grep],
   function(x)
     as.POSIXct(x, tz = "UTC"))
 
 
 # Filter out blacklisted ship types, ports, etc.
 ship_raw_tbl <-
-  tbl_df(ship_data[ship_data$ShipType %nin% ships_blacklist &
-      ship_data$NBIC_ShipType %nin% ships_blacklist &
-      ship_data$PortStd %nin% ports_blacklist,]) %>%
-  arrange(LRNOIMOShipNo, ArrivalDateFull)
+  tbl_df(arrivals_only[arrivals_only$nbic_shiptype %nin% ships_blacklist &
+      arrivals_only$sub_type %nin% ships_blacklist &
+      arrivals_only$arrival_port %nin% ports_blacklist, ]) %>%
+  arrange(imo_no, arrival_date)
 
 
 # Calculate difference between ArrivalDateStd and SailDateStd for each port
 # calling
 
 ship_raw_tbl <- ship_raw_tbl %>%
-  select(
-    LRNOIMOShipNo,
-    NBIC_ShipType,
-    Port,
-    PortStd,
-    Port_Country,
-    Movementtype,
-    ArrivalDateFullStd,
-    SailDateFullStd,
-    ArrivalID,
-    sameport_id
-  ) %>%
-  left_join(.,
-    port_data,
-    by = c("PortStd", "Port_Country"),
-    copy = TRUE) %>%
   mutate(port_duration = abs(as.numeric(
-    difftime(SailDateFullStd,
-      ArrivalDateFullStd, units = "hours")
-  ))) %>%
-  arrange(LRNOIMOShipNo, ArrivalDateFullStd)
+    difftime(departure_date,
+      arrival_date, units = "hours")))) %>%
+  arrange(imo_no, arrival_date)
 
 # ----WettedSurfaceArea_Calculations--------------------------------------------
 # Calculate wetted surface area from IHS_Fairplay table
@@ -186,17 +172,16 @@ nbic_con <-
   )
 
 wsa_calc_qry <- "SELECT
-    IMO_No AS LRNOIMOShipNo,
+    IMO_No,
     Beam,
     Depth,
     Draft,
     LOA,
-    LBP,
+    LBP ,
     GT,
     Dwt,
     TEU,
     Nrt,
-    Speed,
     Main_Vessel_Type,
     Sub_Type
 FROM
@@ -204,74 +189,76 @@ FROM
 
 wsa_df <- tbl(nbic_con, sql(wsa_calc_qry)) %>%
   collect(n = Inf)
+  
+names(wsa_df) <- stringr::str_to_lower(names(wsa_df))
 
 try(DBI::dbDisconnect(nbic_con), silent = TRUE)
 
 # Add to existing data
 ship_raw_tbl <-
-  left_join(ship_raw_tbl, wsa_df, by = "LRNOIMOShipNo")
+  left_join(ship_raw_tbl, wsa_df, by = c("imo_no", "sub_type"))
 
+# Check for missing subtypes table(ship_raw_tbl$Sub_Type, useNA = "always")
 
 # Calculate wetted surface area depending on ship type
-wsa_calc_fn <- function(NBIC_ShipType, Sub_Type, Nrt, LBP, Draft, Beam) {
+wsa_calc_fn <- function(nbic_shiptype, sub_type, nrt, lbp, draft, beam) {
   wsa <- NA_real_
-  if (!is.na(Nrt)) {
-    if (NBIC_ShipType == "Bulker")
-      wsa <- 26.487 * Nrt ^ 0.606
-    if (NBIC_ShipType == "Tanker")
-      wsa <- 29.614 * Nrt ^ 0.601
-    if (NBIC_ShipType == "Passenger")
-      wsa <- 21.956 * Nrt ^ 0.584
-    if (NBIC_ShipType == "Container")
-      wsa <-  8.073 * Nrt ^ 0.645
-    if (NBIC_ShipType == "RoRo")
-      wsa <- 39.628 * Nrt ^ 0.54
-    if (NBIC_ShipType == "General Cargo")
-      wsa <- 26.15 * Nrt ^ 0.587
-    if (NBIC_ShipType == "Barge" | Sub_Type == "Oil Barge")
-      wsa <- LBP * (2 * Draft + Beam)
-    if (NBIC_ShipType == "Other" & Sub_Type != "Oil Barge")
-      wsa <- 34.16 * Nrt ^ 0.576
-    if (NBIC_ShipType == "Combo")
-      wsa <- 34.16 * Nrt ^ 0.576
-    if (NBIC_ShipType == "Reefer")
-      wsa <- 34.16 * Nrt ^ 0.576
-    if (NBIC_ShipType == "Tug")
-      wsa <- 4000 + 34.16 * Nrt ^ 0.576
-    if (NBIC_ShipType == "Offshore Supply Vessel")
-      wsa <- 34.16 * Nrt ^ 0.576
+  if (!is.na(nrt)) {
+    if (nbic_shiptype == "Bulker")
+      wsa <- 26.487 * nrt ^ 0.606
+    if (nbic_shiptype == "Tanker")
+      wsa <- 29.614 * nrt ^ 0.601
+    if (nbic_shiptype == "Passenger")
+      wsa <- 21.956 * nrt ^ 0.584
+    if (nbic_shiptype == "Container")
+      wsa <-  8.073 * nrt ^ 0.645
+    if (nbic_shiptype == "RoRo")
+      wsa <- 39.628 * nrt ^ 0.54
+    if (nbic_shiptype == "General Cargo")
+      wsa <- 26.15 * nrt ^ 0.587
+    if (nbic_shiptype == "Barge" | sub_type == "Oil Barge")
+      wsa <- lbp * (2 * draft + beam)
+    if (nbic_shiptype == "Other" & sub_type != "Oil Barge")
+      wsa <- 34.16 * nrt ^ 0.576
+    if (nbic_shiptype == "Combo")
+      wsa <- 34.16 * nrt ^ 0.576
+    if (nbic_shiptype == "Reefer")
+      wsa <- 34.16 * nrt ^ 0.576
+    if (nbic_shiptype == "Tug")
+      wsa <- 4000 + 34.16 * nrt ^ 0.576
+    if (nbic_shiptype == "Other" & sub_type == "Tug")
+      wsa <- 4000 + 34.16 * nrt ^ 0.576
+    if (nbic_shiptype == "Offshore Supply Vessel")
+      wsa <- 34.16 * nrt ^ 0.576
   }
   wsa
 }
 
-# FIXME
 ship_raw_tbl <-
   ship_raw_tbl %>%
-  mutate(wsa = purrr::pmap_dbl(list(NBIC_ShipType, Sub_Type, Nrt, LBP, Draft, Beam), wsa_calc_fn))
+  mutate(wsa = purrr::pmap_dbl(list(nbic_shiptype, sub_type, nrt, lbp, draft,
+    beam), wsa_calc_fn))
 
 # Filter out bad ships than are drive-bys (must spend at least 1/2 hour in ports)
 ship_movement_raw_tbl <- dtplyr::tbl_dt(
   ship_raw_tbl %>%
     filter(port_duration > 0.5) %>%
-    select(PortStd,
-      REG_LRGGEO,
-      Port_Country,
-      Latitude = PortLatitudeStd,
-      Longitude = PortLongitudeStd,
-      LRNOIMOShipNo,
-      ShipType = NBIC_ShipType,
-      Sub_Type,
-      ArrivalID,
-      ArrivalDateFullStd,
-      SailDateFullStd,
-      sameport_id,
+    select(port = arrival_port,
+      reg_lrggeo = arrival_bioregion,
+      latitude = arrival_lat,
+      longitude = arrival_lon,
+      lrnoimoshipno = imo_no,
+      nbic_shiptype,
+      sub_type,
+      arrival_date,
+      departure_date,
       wsa,
-      GT,
-      Nrt,
-      Depth,
-      Draft,
-      LOA,
-      Dwt
+      gt,
+      nrt,
+      depth,
+      draft,
+      loa,
+      dwt
     )
 )
 
@@ -283,29 +270,37 @@ ship_movement_raw_tbl <- dtplyr::tbl_dt(
 
 ship_imo_temp_tbl <-
   ship_movement_raw_tbl %>%
-  group_by(LRNOIMOShipNo) %>%
-  select(ShipType, Sub_Type, wsa, GT, Nrt, Depth, Draft, LOA, Dwt) %>%
+  group_by(lrnoimoshipno) %>%
+  select(nbic_shiptype, sub_type, wsa, gt, nrt, depth, draft, loa, dwt) %>%
   unique()
 
 ship_imo_temp_tbl <- ship_imo_temp_tbl %>%
-  mutate(LRNOIMOShipNo = paste0("IMO", LRNOIMOShipNo))
+  mutate(lrnoimoshipno = paste0("IMO", lrnoimoshipno))
 
 flog.info("Begin multiple imputation to fill in missing WSA", name = "info.log")
 
 # Use multiple imputation for missing wsa values
 
 imp_sub_tbl <- ship_imo_temp_tbl
-imp_sub_tbl$LRNOIMOShipNo <- NULL
-imp <- mice(imp_sub_tbl, meth = "rf", m = 1)
+imp_sub_tbl$lrnoimoshipno <- NULL
+imp <- mice(imp_sub_tbl, meth = "rf", m = 1, maxit = 10)
 imp_df <- mice::complete(imp)
 
 ## Use this table below for ship information in the model
 ship_imo_tbl <-
-  cbind(LRNOIMOShipNo = ship_imo_temp_tbl$LRNOIMOShipNo,
+  cbind(lrnoimoshipno = ship_imo_temp_tbl$lrnoimoshipno,
     imp_df,
-    stringsAsFactors = FALSE)
+    stringsAsFactors = FALSE) %>%
+    select(lrnoimoshipno, wsa)
 
 rm(ship_imo_temp_tbl)
+
+# Join arrivals table with imputed wsa values
+
+ship_movement_raw_tbl <- ship_movement_raw_tbl %>%
+		select( -wsa, -gt, -nrt, -depth, -draft, -loa, -dwt) %>%
+		mutate(lrnoimoshipno = paste0("IMO", lrnoimoshipno)) %>%
+		left_join(ship_imo_tbl, by = "lrnoimoshipno", copy = TRUE)
 
 #---End of Wetted Surface Area calculations-------------------------------------
 
@@ -333,80 +328,55 @@ datetimes_split <- purrr::map(datetimes_idx_chunks, function(x) datetime_df[x, ]
 # intervals
 
 ship_raw_tbl <- ship_movement_raw_tbl %>%
-  mutate(SailDateFullStd = as.POSIXct(ArrivalDateFullStd, tz = "UTC"),
-  ArrivalDateFullStd = as.POSIXct(ArrivalDateFullStd, tz = "UTC") + 1) %>%
-  mutate(arr_time_idx = findInterval(ArrivalDateFullStd,
+  mutate(departure_date = as.POSIXct(departure_date, tz = "UTC"),
+  arrival_date = as.POSIXct(arrival_date, tz = "UTC") + 1) %>%
+  mutate(arr_time_idx = findInterval(arrival_date,
       datetime_df[["datetime"]]),
-    sail_time_idx = findInterval(SailDateFullStd,
-      datetime_df[["datetime"]])) %>%
+    sail_time_idx = findInterval(departure_date,
+      datetime_df[["datetime"]]))
+   
+      
+ship_raw_tbl <- ship_raw_tbl %>%
   filter(arr_time_idx > 0) %>%
   mutate(arrivaltime_slice = datetime_df[["datetime"]][arr_time_idx],
     sailtime_slice = datetime_df[["datetime"]][sail_time_idx]) %>%
   unique()
 
-# Port invasion status ## ------------------------------------------------------
+# Get unique port and ship names to define array dimensions ## -----------------
+port_names <- port_data %>%
+  purrr::pluck("port")
 
-# Get port names that were visited by each ship, excluding Gibraltar
-port_invasion_tbl <- ship_raw_tbl %>%
-  filter(!is.na(PortStd), PortStd != "Gibraltar") %>%
-  select(PortStd) %>%
-  unique()
-
-# Add in additional port information
-port_portnames <- port_data %>%
-  right_join(port_invasion_tbl,  by = "PortStd") %>%
-  arrange(PortStd)
-
-rm(port_invasion_tbl)
-
-# End of port invasion status ## -----------------------------------------------
-
-# Get names of unique vessels and ports
-ship_names <- ship_imo_tbl %>%
-  purrr::pluck("LRNOIMOShipNo") %>%
+ship_names <- ship_raw_tbl %>%
+  purrr::pluck("lrnoimoshipno") %>%
   unique() %>%
   sort()
 
-port_names <- port_portnames %>%
-  purrr::pluck("PortStd")
 
 # Preallocate ships, and ports arrays ------------------------------------------
 
  ships_array <- matrix(data = NA_real_, nrow = length(ship_names),
-   ncol = nrow(datetime_df), dimnames = list(LRNOIMOShipNo = ship_names,
+   ncol = nrow(datetime_df), dimnames = list(lrnoimoshipno = ship_names,
    time_idx = as.character(datetime_df[["datetime"]])))
 
 # Array to store port invasion status
  ports_array <- matrix(data = NA_real_,  nrow = nrow(datetime_df),
    ncol = length(port_names), dimnames = list(
      time_idx = as.character(datetime_df[["datetime"]]),
-     PortStd = sort(port_names)))
+     port = sort(port_names)))
 
 # Save ship wetted surface area, ship arrays and port arrays
 
-saveRDS(ship_imo_tbl, file = file.path(root_dir(), "data", scenario_dir,
+saveRDS(ship_imo_tbl, file = file.path(root_dir(), "data", scenario,
   "ship_imo_tbl.rds"), compress = TRUE)
 
-saveRDS(ships_array, file = file.path(root_dir(), "data", scenario_dir,
+saveRDS(ships_array, file = file.path(root_dir(), "data", scenario,
   "ships_array.rds"), compress = TRUE)
 
-saveRDS(ports_array, file = file.path(root_dir(), "data", scenario_dir,
+saveRDS(ports_array, file = file.path(root_dir(), "data", scenario,
   "ports_array.rds"), compress = TRUE)
 
 rm(ship_imo_tbl, ships_array, ports_array)
 
-
-# Populate ship-port movement array ahead of time
-# Gets ship name, position for each time step
-
-# Read in Mark's checklist for multiple ports to remove from data set
-port_checklist <- read_tsv(file.path(root_dir(), "data",
-  "Multiple_stops_new.tsv"))
-
-port_notuse <- port_checklist %>%
-  mutate(arrivaltime_slice = lubridate::force_tz(arrivaltime_slice,
-    tzone = "UTC")) %>%
-  filter(use == 0)
 
 # Section to population ship position array -----------------------------------
 # Loop through datetime chunks
@@ -420,7 +390,7 @@ for (k in seq_along(datetimes_split)) {
     dim = c(length(ship_names),
       length(port_names), nrow(datetime_chunks)),
     dimnames = list(
-      LRNOIMOShipNo = ship_names,
+      lrnoimoshipno = ship_names,
       PortStd = port_names,
       time_idx = format(datetime_chunks[["datetime"]],
         format = "%Y-%m-%d %H:%M:%S")
@@ -435,21 +405,13 @@ for (k in seq_along(datetimes_split)) {
       filter(
         arrivaltime_slice <= datetime_chunks[["datetime"]][tt],
         sailtime_slice > datetime_chunks[["datetime"]][tt]) %>%
-      mutate(
-        LRNOIMOShipNo = paste0("IMO", LRNOIMOShipNo),
-        duration = SailDateFullStd - ArrivalDateFullStd
-      ) %>%
+      mutate(duration = departure_date - arrival_date) %>%
       select(
-        LRNOIMOShipNo,
-        PortStd,
+        lrnoimoshipno,
+        port,
         arrivaltime_slice,
         sailtime_slice,
         duration) %>%
-      filter(
-        LRNOIMOShipNo %nin% port_notuse[["LRNOIMOShipNo"]],
-        arrivaltime_slice %nin% port_notuse[["arrivaltime_slice"]],
-        PortStd %nin% port_notuse[["PortStd"]]
-      ) %>%
       unique()
 
     # Filtering remaining multiple ports in the same timestep. This step
@@ -457,15 +419,12 @@ for (k in seq_along(datetimes_split)) {
     #  gets a 1, otherwise, if it contains the maximum duration, it gets a 2.
 
     ship_movement_sub_tbl <- ship_movement_sub_tbl %>%
-      group_by(LRNOIMOShipNo, arrivaltime_slice) %>%
-      mutate(idx = ifelse(
-        PortStd %in% c("Panama Canal", "Houston"), 1,
-        ifelse(duration == max(duration), 2, NA)
-      ))
+      group_by(lrnoimoshipno, arrivaltime_slice) %>%
+      mutate(idx = ifelse(duration == max(duration), 2, NA))
 
     # Select only the ports that have the lowest "importance" index
     ship_movement_sub_tbl <- ship_movement_sub_tbl %>%
-      group_by(LRNOIMOShipNo, arrivaltime_slice) %>%
+      group_by(lrnoimoshipno, arrivaltime_slice) %>%
       filter(which.min(idx)) %>%
       select(-idx)
 
@@ -473,9 +432,9 @@ for (k in seq_along(datetimes_split)) {
     # corresponding position in the array.
 
     if (nrow(ship_movement_sub_tbl) > 0) {
-      ship_match <- match(ship_movement_sub_tbl[['LRNOIMOShipNo']],
+      ship_match <- match(ship_movement_sub_tbl[['lrnoimoshipno']],
         dimnames(position_array_chunk)[[1]])
-      port_match <- match(ship_movement_sub_tbl[['PortStd']],
+      port_match <- match(ship_movement_sub_tbl[['port']],
         dimnames(position_array_chunk)[[2]])
       time_match <- match(
         format(datetime_chunks[["datetime"]][[tt]],
@@ -513,7 +472,7 @@ for (k in seq_along(datetimes_split)) {
 # Write to external object
 
 saveRDS(position_array_chunk, file = file.path(root_dir(), "data",
-  scenario_dir,
+  scenario,
   sprintf("position_array_chunk%0.3d.rds", k)), compress = TRUE)
 
 flog.info("Iteration: %i out of %i", k, length(datetimes_split),
