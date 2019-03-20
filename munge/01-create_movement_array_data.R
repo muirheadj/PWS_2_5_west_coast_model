@@ -16,6 +16,7 @@ library("rprojroot")
 library("keyring")
 library("mice")
 library("jmhelpers")
+library("yaml")
 
 root_crit <- has_dirname("PWS_2_5_west_coast_model", subdir = "src")
 root_dir <- root_crit$make_fix_file()
@@ -62,7 +63,8 @@ ports_con <-
 
 # Read in from CSV file
 
-arrivals_qry <- 'SELECT 
+# CHECK ON THIS
+arrivals_qry <- 'SELECT
     NBIC_Vessel AS imo_no,
     Type AS nbic_shiptype,
     Sub_Type AS sub_type,
@@ -71,8 +73,8 @@ arrivals_qry <- 'SELECT
     Arrival_Bioregion AS arrival_bioregion,
     Arrival_Lon AS arrival_lon,
     Arrival_Lat AS arrival_lat,
-    arrival_date AS arrival_date,
-    departure_date AS departure_date,
+    Arrival_date AS arrival_date,
+    Departure_date AS departure_date,
     Last_Port AS last_port,
     Last_Lon AS last_lon,
     Last_Lat AS last_lat,
@@ -80,19 +82,30 @@ arrivals_qry <- 'SELECT
 FROM
     NVMCws_Arrivals
 WHERE
+		Arrival_Lat IS NOT NULL AND Arrival_Lon IS NOT NULL AND
+    (Arrival_date IS NOT NULL AND Departure_date IS NOT NULL) AND
     Status = "reviewed" AND
     Arrival_Coast IN ("ca_west", "West", "Alaska") AND
-	Analysis_year_arrival BETWEEN 2010 AND 2017'
-
+    Arrival_date BETWEEN DATE("2010-01-01") AND DATE("2017-12-31")'
 
 arrivals_full <- tbl(ports_con, sql(arrivals_qry)) %>%
   collect(n = Inf)
 
-if (scenario == "coastwise") {
-arrivals_full <- arrivals_full %>%
-    filter(transit_type == "Coastwise")
-}
-  
+
+# Check for ship movement
+
+coastwise_ships <- arrivals_full %>%
+	filter(!is.na(imo_no)) %>%
+	group_by(imo_no) %>%
+	summarise(transit_status = ifelse(all(transit_type == "Coastwise"),
+	  "coastwise_only", ifelse(all(transit_type == "Overseas"), "overseas_only",
+	  "both")))
+
+coastwise_summary <- coastwise_ships %>%
+		group_by(transit_status) %>%
+		tally()
+
+
 # Just use the columns on arrivals data. Last port information is required
 # if the last port was on the West Coast, including Canada or Alaska.
 
@@ -110,25 +123,29 @@ previous_ports <- arrivals_full %>%
   select(port = last_port, lon = last_lon, lat = last_lat,
   bioregion = last_bioregion) %>%
   unique()
-  
+
 # Port data includes last ports that are not on the West Coast or Alaska,
 # but are filtered out in the next step
 
 port_data <- bind_rows(arrival_ports, previous_ports) %>%
   unique() %>%
-  filter(bioregion %in% c("NA-S1", "NEP-I", "NEP-II", "NEP-III", "NEP-IV",
-  "NEP-V", "NEP-VI")) %>%
+  filter((!is.na(lat) | !is.na(lon)),
+    bioregion %in% c("NA-S1", "NEP-I", "NEP-II", "NEP-III", "NEP-IV",
+      "NEP-V", "NEP-VI")) %>%
   arrange(port)
 
-saveRDS(port_data, file.path(root_dir(), "data", scenario,
-  "ports_data.rds"))
+
+# Read in raster data, and create a new column for every species if
+# the value is above the threshold for habitat suitability
+
+ports_destfile <- file.path(root_dir(), "data", "port_data.csv")
+if (!file.exists(ports_destfile)) {
+  readr::write_csv(port_data, file.path(root_dir(), "data", "port_data.csv"))
+}
 
 
 # ship movement ---------------------------------------------------------------
 # Ports blacklist to exclude from analysis
-ports_blacklist <- c(
-"Pacific Area Lightering (USA, CA)"
-)
 
 ships_blacklist <- c("Military", "Unknown", "Recreational")
 
@@ -137,17 +154,14 @@ ships_blacklist <- c("Military", "Unknown", "Recreational")
 datetype_grep <-
   grepl("[0-9]{4}[-][0-9]{2}[-][0-9]{2}.*", arrivals_only[1:5,],
     perl = TRUE)
-    
+
 arrivals_only[, datetype_grep] <- lapply(arrivals_only[, datetype_grep],
   function(x)
     as.POSIXct(x, tz = "UTC"))
 
-
 # Filter out blacklisted ship types, ports, etc.
-ship_raw_tbl <-
-  tbl_df(arrivals_only[arrivals_only$nbic_shiptype %nin% ships_blacklist &
-      arrivals_only$sub_type %nin% ships_blacklist &
-      arrivals_only$arrival_port %nin% ports_blacklist, ]) %>%
+ship_raw_tbl <- arrivals_only %>%
+  filter(nbic_shiptype %nin% ships_blacklist, sub_type %nin% ships_blacklist) %>%
   arrange(imo_no, arrival_date)
 
 
@@ -155,9 +169,9 @@ ship_raw_tbl <-
 # calling
 
 ship_raw_tbl <- ship_raw_tbl %>%
-  mutate(port_duration = abs(as.numeric(
+  mutate(port_duration = as.numeric(
     difftime(departure_date,
-      arrival_date, units = "hours")))) %>%
+      arrival_date, units = "hours"))) %>%
   arrange(imo_no, arrival_date)
 
 # ----WettedSurfaceArea_Calculations--------------------------------------------
@@ -189,7 +203,7 @@ FROM
 
 wsa_df <- tbl(nbic_con, sql(wsa_calc_qry)) %>%
   collect(n = Inf)
-  
+
 names(wsa_df) <- stringr::str_to_lower(names(wsa_df))
 
 try(DBI::dbDisconnect(nbic_con), silent = TRUE)
@@ -240,9 +254,7 @@ ship_raw_tbl <-
     beam), wsa_calc_fn))
 
 # Filter out bad ships than are drive-bys (must spend at least 1/2 hour in ports)
-ship_movement_raw_tbl <- dtplyr::tbl_dt(
-  ship_raw_tbl %>%
-    filter(port_duration > 0.5) %>%
+ship_movement_raw_tbl <- ship_raw_tbl %>%
     select(port = arrival_port,
       reg_lrggeo = arrival_bioregion,
       latitude = arrival_lat,
@@ -260,7 +272,6 @@ ship_movement_raw_tbl <- dtplyr::tbl_dt(
       loa,
       dwt
     )
-)
 
 # End of ship movement ## ------------------------------------------------------
 
@@ -271,11 +282,13 @@ ship_movement_raw_tbl <- dtplyr::tbl_dt(
 ship_imo_temp_tbl <-
   ship_movement_raw_tbl %>%
   group_by(lrnoimoshipno) %>%
-  select(nbic_shiptype, sub_type, wsa, gt, nrt, depth, draft, loa, dwt) %>%
+  select(lrnoimoshipno, nbic_shiptype, sub_type, wsa, gt, nrt, depth, draft,
+    loa, dwt) %>%
   unique()
 
 ship_imo_temp_tbl <- ship_imo_temp_tbl %>%
-  mutate(lrnoimoshipno = paste0("IMO", lrnoimoshipno))
+  ungroup() %>%
+  mutate(lrnoimoshipno = paste0("IMO", as.character(lrnoimoshipno)))
 
 flog.info("Begin multiple imputation to fill in missing WSA", name = "info.log")
 
@@ -300,7 +313,7 @@ rm(ship_imo_temp_tbl)
 ship_movement_raw_tbl <- ship_movement_raw_tbl %>%
 		select( -wsa, -gt, -nrt, -depth, -draft, -loa, -dwt) %>%
 		mutate(lrnoimoshipno = paste0("IMO", lrnoimoshipno)) %>%
-		left_join(ship_imo_tbl, by = "lrnoimoshipno", copy = TRUE)
+    left_join(ship_imo_tbl, by = "lrnoimoshipno", copy = FALSE)
 
 #---End of Wetted Surface Area calculations-------------------------------------
 
@@ -309,13 +322,13 @@ ship_movement_raw_tbl <- ship_movement_raw_tbl %>%
 
 datetime_df <- tibble(datetime =
   seq(from = as.POSIXct("2010-01-01 00:00:00", tz = "UTC"),
-    to = as.POSIXct("2017-12-31 18:00:00", tz = "UTC") + (6 * 3600),
+    to = as.POSIXct("2018-12-31 18:00:00", tz = "UTC") + (6 * 3600),
     by = '6 hours')) %>%
   mutate(datetime_idx = seq_along(datetime))
 
 # Set size of number of rows in each chunk to process for data.frames and
 # arrays
-chunk_size <- 100
+chunk_size <- 50
 
 # Do the same for the indices so that we can use these indices for further
 #  extraction
@@ -334,10 +347,9 @@ ship_raw_tbl <- ship_movement_raw_tbl %>%
       datetime_df[["datetime"]]),
     sail_time_idx = findInterval(departure_date,
       datetime_df[["datetime"]]))
-   
-      
+
 ship_raw_tbl <- ship_raw_tbl %>%
-  filter(arr_time_idx > 0) %>%
+  filter(arr_time_idx > 0, sail_time_idx > 0) %>%
   mutate(arrivaltime_slice = datetime_df[["datetime"]][arr_time_idx],
     sailtime_slice = datetime_df[["datetime"]][sail_time_idx]) %>%
   unique()
@@ -354,12 +366,12 @@ ship_names <- ship_raw_tbl %>%
 
 # Preallocate ships, and ports arrays ------------------------------------------
 
- ships_array <- matrix(data = NA_real_, nrow = length(ship_names),
+ ships_array <- matrix(data = NA_integer_, nrow = length(ship_names),
    ncol = nrow(datetime_df), dimnames = list(lrnoimoshipno = ship_names,
    time_idx = as.character(datetime_df[["datetime"]])))
 
 # Array to store port invasion status
- ports_array <- matrix(data = NA_real_,  nrow = nrow(datetime_df),
+ ports_array <- matrix(data = NA_integer_,  nrow = nrow(datetime_df),
    ncol = length(port_names), dimnames = list(
      time_idx = as.character(datetime_df[["datetime"]]),
      port = sort(port_names)))
@@ -391,7 +403,7 @@ for (k in seq_along(datetimes_split)) {
       length(port_names), nrow(datetime_chunks)),
     dimnames = list(
       lrnoimoshipno = ship_names,
-      PortStd = port_names,
+      port = port_names,
       time_idx = format(datetime_chunks[["datetime"]],
         format = "%Y-%m-%d %H:%M:%S")
       )
@@ -400,6 +412,7 @@ for (k in seq_along(datetimes_split)) {
   for (tt in seq_along(datetime_chunks[["datetime"]])) {
   # Subset the data.table ship_raw_tbl by time slice, and calculate the duration
   # in port. Use Mark's data on choosing which ports to use.
+
 
     ship_movement_sub_tbl <- ship_raw_tbl %>%
       filter(
@@ -425,7 +438,7 @@ for (k in seq_along(datetimes_split)) {
     # Select only the ports that have the lowest "importance" index
     ship_movement_sub_tbl <- ship_movement_sub_tbl %>%
       group_by(lrnoimoshipno, arrivaltime_slice) %>%
-      filter(which.min(idx)) %>%
+      dplyr::filter(idx == min(idx)) %>%
       select(-idx)
 
     # If a record exists for this combination, match the record to its
@@ -456,7 +469,7 @@ for (k in seq_along(datetimes_split)) {
     assert_all_are_in_closed_range(rowSums(position_array_chunk[, , tt],
       na.rm = TRUE), 0, 1, severity = "warning")
 
-   if(any(warn > 1)) {
+   if (any(warn > 1)) {
      # Find out which ports the ships are in:
      duplicate_arrivals <- which(warn > 1, arr.ind = TRUE)
 
