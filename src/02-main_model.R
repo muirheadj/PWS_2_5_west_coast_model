@@ -50,10 +50,10 @@ ship_and_port_names_from_ship_position <- function(ship_position, time_index){
 
 # PORT CYPRID COMPENTENCY
 port_cyprid_compentency_fn <- function(ports_array = ports_array,
- port_competency_proportion = port_compentency_prob,
- lifestage_vec = port_to_ship_lifestages, x = t_global,
- port_emigration_input = port_cyprid_compentency,
- port_lifehistory_input = port_lifehistory_status) {
+  port_competency_proportion = port_compentency_prob,
+  lifestage_vec = port_to_ship_lifestages, x = t_global,
+  port_emigration_input = port_cyprid_compentency,
+  port_lifehistory_input = port_lifehistory_status) {
 
 
   # This function calculations the outgoing emigration of dispersing lifestages
@@ -101,7 +101,7 @@ port_immigration_fn <- function(ports_array = ports_array,
   ship_emigration = ship_emigration, ship_position = ship_position,
   t1 = t1_position_idx,
   port_immigration_input = port_immigration, x = t_global,
-  ports_instant_mortality) {
+  ports_instant_mortality, ports_habitat_suitability) {
 
   # Make sure to use ship position from t_global - 1
   if (x > 1) {
@@ -139,14 +139,19 @@ port_immigration_fn <- function(ports_array = ports_array,
     # Add stochastic establishment for larva
     prob_establishment <- 1 - exp(-1e-5 * port_immigration_total[1, ])
 
-    p_random <- runif(n = length(prob_establishment), min = 0, max = 1)
+    p_random_inst_mort <- runif(n = length(prob_establishment), min = 0, max = 1)
+
+  # Add in environmental matching for each port
+    browser()
+    port_immigration_total[1, ] <- prob_habitat_suitability *
+  	   port_immigration_total[1, ]
 
   # Keep track of instant mortality for ports
 
     ports_instant_mortality[(x - 1), match(names(prob_establishment),
-      colnames(ports_instant_mortality))] <<- (p_random < prob_establishment)
+      colnames(ports_instant_mortality))] <<- (p_random_inst_mort < prob_establishment)
 
-    port_immigration_total[1, ] <- (p_random < prob_establishment) *
+    port_immigration_total[1, ] <- (p_random_inst_mort < prob_establishment) *
       port_immigration_total[1, ]
 
     afill(port_immigration_input, t1_date_global,,, local = TRUE) <-
@@ -209,13 +214,13 @@ ship_immigration_fn <- function(ships_pop,
     # relative surface area
     # frac_transferred is the random proportion that is able to be transferred
     # to the ship
-    
-    
+
+
 ### CHECK ON THIS
 
       port_to_ship_migration_proportion <- port_ship_migration %>%
       left_join(ship_imo_tbl, by = c(ships = "lrnimoshipno")) %>%
-      select(-GT, -Nrt) %>%
+      select(-gt, -nrt) %>%
       group_by(ports) %>%
       mutate(frac_transferred = rbinom(1, size = 1000, prob = 0.04) / 1000) %>%
       mutate(wsa_scale = effective_wsa / sum(effective_wsa, port_area,
@@ -246,11 +251,11 @@ ship_immigration_fn <- function(ships_pop,
    # Reshape into a matrix
 
     ship_immigration_size_subset <- port_to_ship_migration_size %>%
-    ungroup() %>%
-    select(ships, juvenile) %>%
-    melt(value.name = "pop", id.vars = "ships") %>%
-    acast(variable ~ ships, value.var = "pop",
-      fun.aggregate = function (x) sum(x, na.rm = TRUE), drop = FALSE)
+      ungroup() %>%
+      select(ships, juvenile) %>%
+      melt(value.name = "pop", id.vars = "ships") %>%
+      acast(variable ~ ships, value.var = "pop",
+        fun.aggregate = function(x) sum(x, na.rm = TRUE), drop = FALSE)
 
 
     # Afill into 3-d array for ship_immigration
@@ -315,7 +320,7 @@ port_juvenile_production_fn <- function(ports_pop,
        select(ports, juvenile) %>%
        melt(value.name = "pop", id.vars = "ports") %>%
        acast(variable ~ ports, value.var = "pop",
-         fun.aggregate = function (x) mean(x, na.rm = TRUE), drop = TRUE)
+         fun.aggregate = function(x) mean(x, na.rm = TRUE), drop = TRUE)
     }
   }
 
@@ -391,18 +396,16 @@ main_model_fn <- function(ship_imo_tbl, param_grid, A_mat, ports_pop, ...) {
   port_compentency_prob <- param_grid[["port_compentency_prob"]]
 
   # Get sequence of datetimes in POSIXct format
-  dateseq <- seq(from = as.POSIXct("2010-01-01 00:00:00", tz = "UTC"),
-    to = as.POSIXct("2017-12-31 18:00:00", tz = "UTC") + (6 * 3600),
-    by = '6 hours')
+  dateseq <- as.POSIXct(dimnames(ports_pop)[[1]], tz = "UTC")
 
   # date to set life-history time lag limit
-  
+
   date_pastend <- dateseq[length(dateseq)] + (24 * 3600)
 
   # Create list of date chunks in order to figure out which bootstrap chunks to
   # pull out
 
-  chunk_size <- 100
+  chunk_size <- 50
 
   date_list_ext <- dimnames(ships_pop)[[1]]
   date_list_ext_chunks <- chunkr(date_list_ext, chunk_size = chunk_size)
@@ -427,9 +430,8 @@ main_model_fn <- function(ship_imo_tbl, param_grid, A_mat, ports_pop, ...) {
   # Generate hybrid indicies to read the ff arrays
   hi_ship <- 1:dim(k_ships)[2]  # Index for ships
   hi_port <- 1:dim(ports_pop)[3]  # Index for ports
-  hi_t1 <- 1:100  # Index for time slices 1:100
-  hi_t2 <- 101:200  # Index for time slices 101:200
-  hi_t1t2 <- 1:200  # Index for time slices 1:200
+  hi_t1 <- 1:50  # Index for time slices 1:50
+  hi_t2 <- 51:100  # Index for time slices 51:100
 
   last_chunk <- tail(date_list_ext_chunks, 1)
   last_chunk_name <- as.numeric(names(last_chunk)) # Number for the last chunk
@@ -458,7 +460,7 @@ main_model_fn <- function(ship_imo_tbl, param_grid, A_mat, ports_pop, ...) {
   }
 
 
-for (t_global in seq_along(date_list_ext)){
+for (t_global in seq_along(date_list_ext)) {
 
   # Get the time slice position in the chunk as well as the name in the chunk
   # Current date
@@ -538,19 +540,19 @@ for (t_global in seq_along(date_list_ext)){
 
       port_lifehistory_status[port_lifehistory_status$name %in% seed_ports,
         "larval_time"] <-
-        as.POSIXct("2009-11-16 00:00:00", tz = "UTC", origin = "1970-01-01")
+        as.POSIXct("2010-01-01 00:00:00", tz = "UTC", origin = "1970-01-01")
 
       port_lifehistory_status[port_lifehistory_status$name %in% seed_ports,
         "juvenile_time"] <-
-        as.POSIXct("2009-11-16 00:00:00", tz = "UTC", origin = "1970-01-01")
-        
+        as.POSIXct("2010-01-01 00:00:00", tz = "UTC", origin = "1970-01-01")
+
       port_lifehistory_status[port_lifehistory_status$name %in% seed_ports,
         "mature_time"] <-
-        as.POSIXct("2009-11-16 00:00:00", tz = "UTC", origin = "1970-01-01")
-        
+        as.POSIXct("2010-01-01 00:00:00", tz = "UTC", origin = "1970-01-01")
+
       port_lifehistory_status[port_lifehistory_status$name %in% seed_ports,
         "reprod_time"] <-
-        as.POSIXct("2009-11-16 00:00:00", tz = "UTC", origin = "1970-01-01")
+        as.POSIXct("2010-01-01 00:00:00", tz = "UTC", origin = "1970-01-01")
     }
 
     # Update time lag for larval development time if larvae present in
@@ -657,12 +659,14 @@ for (t_global in seq_along(date_list_ext)){
     }
 
     if (t_chunk != current_chunk) {
-      chunk_1 <- readRDS(paste0(boot_directory, "position_array_chunk",
-        sprintf("%0.3d", chunk_load1), ".rds"))
-      chunk_2 <- readRDS(paste0(boot_directory, "position_array_chunk",
-          sprintf("%0.3d", chunk_load2), ".rds"))
+      chunk_1 <- readRDS(file.path(root_dir(), "data", scenario,
+        sprintf("position_array_chunk%0.3d%s", chunk_load1, ".rds")))
+      chunk_2 <- readRDS(file.path(root_dir(), "data", scenario,
+        sprintf("position_array_chunk%0.3d%s", chunk_load2, ".rds")))
 
-      if (t_chunk == 1){
+
+      # THIS IS WHERE IT IS CRASHING
+      if (t_chunk == 1) {
         ship_position <- array(data = as.logical(NA),
           dim = c(dim(chunk_1)[[1]], dim(chunk_1)[[2]],
             dim(chunk_1)[[3]] + dim(chunk_2)[[3]]),
@@ -688,10 +692,10 @@ for (t_global in seq_along(date_list_ext)){
       if (t_chunk == last_chunk_name) {
       # Have to adjust for the last chunk which only has 5 'slices'
 
-        ship_position[hi_ship, hi_port, 101:(101 + last_chunk_length - 1 )] <-
+        ship_position[hi_ship, hi_port, 51:(51 + last_chunk_length - 1 )] <-
           chunk_2[hi_ship, hi_port, last_chunk_length]
 
-        dimnames(ship_position)[[3]][1:(101 + last_chunk_length - 1 )] <-
+        dimnames(ship_position)[[3]][1:(51 + last_chunk_length - 1 )] <-
           c(dimnames(chunk_1)[[3]], dimnames(chunk_2)[[3]])
       }
 
@@ -723,7 +727,7 @@ for (t_global in seq_along(date_list_ext)){
 
     # Reduction of larval and cyprid stages to zero when ship is underway
       ships_pop <- ships_underway_larval_reduction_fn(ships_pop,
-      x = t_global, ship_position, t1_position_idx)
+        x = t_global, ship_position, t1_position_idx)
     }
 
     # Port emigration
@@ -794,43 +798,43 @@ for (t_global in seq_along(date_list_ext)){
       temp_ports_pop[, temp_ports_pop[, ] <= 2] <- 0
 
       stopifnot(!is.null(dimnames(temp_ports_pop)[[2]]))
-   
+
     } else {
       # In the first time slice, so no t-1 time position
       temp_ports_pop <- ports_pop[t_global, , ]
     }
 
     # Model assertion check to make sure juveniles don't appear before cyprids
-   
+
     afill(ports_pop, t_date_global, , , local = TRUE) <- temp_ports_pop
 
     ports_trace_pop <-
       apply(temp_ports_pop[, dimnames(temp_ports_pop)[[2]] %nin% seed_ports], 1,
         mean)
-    
+
     flog.trace("parameter%s port_population %i %f %f %f %f", sprintf("%.03d",
       param_iter), t_global, ports_trace_pop[1], ports_trace_pop[2],
       ports_trace_pop[3], ports_trace_pop[4], name = "ports_pop_trace",
       capture = FALSE)
-    
+
     ports_trace_n <- apply(temp_ports_pop[, dimnames(temp_ports_pop)[[2]] %nin%
       seed_ports], 1, function(x) sum(x > 0))
-    
+
     flog.trace("parameter%s port_number %i %f %f %f %f", sprintf("%.03d",
       param_iter), t_global, ports_trace_n[1], ports_trace_n[2],
       ports_trace_n[3], ports_trace_n[4], name = "ports_n_trace",
       capture = FALSE)
-   
+
     # Trace for ports_instant_mortality
 
     ports_instant_mortality_sum <-
       sum(ports_instant_mortality[(t_global - 1), ], na.rm = TRUE)
-    
+
     flog.trace("parameter%s port_mortality %i %f", sprintf("%.03d", param_iter),
       t_global, ports_instant_mortality_sum,
       name = "ports_instant_mortality_trace", capture = FALSE)
 
-    
+
     # Calculate population change on ships
     # (ships_pop_array[date, lifestage, ship])
 
@@ -848,7 +852,7 @@ for (t_global in seq_along(date_list_ext)){
 
       temp_ships_pop <- pmax(ceiling(N_ships * ships_logit_factor -
         ship_emigration[(t_global - 1), , ] +
-        ship_immigration[(t_global - 1),, ]), 0)
+        ship_immigration[(t_global - 1), , ]), 0)
 
     } else {
       # In the first time slice, so no t-1 time position
@@ -876,7 +880,7 @@ for (t_global in seq_along(date_list_ext)){
   }  # End of time processing loop
 
   # Create directories to store results
-  parameter_dir <- paste0("parameter", sprintf("%.03d", param_iter))
+  parameter_dir <- sprintf("parameter%.03d", param_iter)
   boot_dir <- paste0("bootstrap_iter", sprintf("%0.3d", boot_iter), "/")
   results_dir <- paste0(basedir, "results/", boot_dir, parameter_dir)
 
@@ -890,7 +894,7 @@ for (t_global in seq_along(date_list_ext)){
  dir.create(results_dir, recursive = TRUE)
 
 # Save data
-param <- list(parameter = paste0("parameter", sprintf("%.03d", param_iter)),
+param <- list(parameter = sprintf("parameter%.03d", param_iter),
   port_area = port_area,
   k_ports = k_ports,
   fw_reduction = fw_reduction,

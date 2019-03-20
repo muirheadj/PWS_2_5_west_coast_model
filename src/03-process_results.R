@@ -24,6 +24,7 @@ results_dir <- find_root_file("results", criterion = root_crit)
 figures_dir <- find_root_file("figures", criterion = root_crit)
 data_dir <- find_root_file("data", criterion = root_crit)
 
+
 process_ports_data <- FALSE
 process_ships_data <- FALSE
 
@@ -47,7 +48,7 @@ parameters_df <-  map_dfr(param_list, process_parameters_fn) %>%
 parameters_df <- parameters_df %>%
   unique() %>%
   mutate(fw_reduction = 1 - as.numeric(fw_reduction),
-    seed_source = factor(seed_source, levels = c("Pac", "Atl"))) %>%
+    seed_source = factor(seed_source)) %>%
   mutate(`Source; FW reduction` = factor(interaction(seed_source,
     fw_reduction, sep = "; "))) %>%
   mutate(`Source; FW reduction` = forcats::fct_reorder(`Source; FW reduction`,
@@ -57,6 +58,8 @@ parameters_df <- parameters_df %>%
 save_object_to_data_dir(parameters_df, include_date = FALSE)
 
 # Read in port information containing bioregion, coordinates, etc
+
+# FIXME TO USE PORTS FROM RESULTS FOR EACH SCENARIO
 port_data <- readRDS(file.path(data_dir, "ports_data.rds")) %>%
   arrange(PortStd)
 
@@ -101,13 +104,13 @@ flog.info("Merging port info with coordinates", name = "model_progress_log")
 # Create summary table of port information
 
 ports_found_in_results <- list_process_df_fn(ports_temp[[3]]) %>%
-  select(PortStd = Location) %>%
+  select(PortStd = location) %>%
   unique()
 
 ports_info <- port_data %>%
   semi_join(ports_found_in_results, by = "PortStd") %>%
-  arrange(REG_LRGGEO, Port_Country, PortStd) %>%
-  select(Port = PortStd, Country = Port_Country, Bioregion = REG_LRGGEO,
+  arrange(reg_lrggeo, Port_Country, PortStd) %>%
+  select(Port = PortStd, Country = Port_Country, Bioregion = reg_lrggeo,
     Latitude = PortLatitudeStd, Longitude = PortLongitudeStd) %>%
   filter(Port != "Panana Canal")
 
@@ -134,11 +137,10 @@ ports_base_long <- ports_base_long %>%
   left_join(port_data, by = c("Location" = "PortStd")) %>%
   left_join(parameters_df, by = "parameter") %>%
   mutate(date = as.Date(Time),
-    seed_port = if_else(REG_LRGGEO == seed_bioregion, "Source port",
-      "Caribbean port")) %>%
-  select(bootstrap, parameter, REG_LRGGEO, Location, seed_port, Lifestage,
+    seed_port = if_else(reg_lrggeo == seed_bioregion, "Source port",
+      "Destination port")) %>%
+  select(bootstrap, parameter, reg_lrggeo, location, seed_port, lifestage,
     date, Time, population = Population) %>%
-  mutate(log10Population = log10p(population)) %>%
   as_tibble()
 
 save_object_to_data_dir(ports_base_long)
@@ -148,14 +150,14 @@ if (!exists("ports_base_long")) {
   ports_base_long <- readRDS(create_filelist_from_data("ports_base_long"))
 }
 
-# Port population info, every time step, for caribbean ports only, no coordinates
-car_ports <- ports_base_long %>%
-  filter(REG_LRGGEO %in% caribbean_bioregions & Location != "Panama Canal") %>%
+# Port population info, every time step, for destination ports only, no coordinates
+destination_ports <- ports_base_long %>%
+  filter(reg_lrggeo %in% destination_bioregions) %>%
   ungroup()
 
 # Calculate number of ports in the Caribbean
-n_carI_ports <- car_ports %>%
-  summarize(n = n_distinct(Location)) %>%
+n_carI_ports <- destination_ports %>%
+  summarize(n = n_distinct(location)) %>%
   unlist() %>%
   as.vector()
 
@@ -303,9 +305,9 @@ sample_ships <- sample(dimnames(ships_temp[[3]])[[3]], size = 100,
   replace = FALSE)
 
 sample_ports <- ports_base_long %>%
-  filter(REG_LRGGEO %in% c(caribbean_bioregions, "NEA-II"),
-    Location != "Panama Canal") %>%
-  select(Location) %>%
+  filter(reg_lrggeo %in% c(destination_bioregions, "NEA-II"),
+    location != "Panama Canal") %>%
+  select(location) %>%
   unique()
 
 
@@ -313,31 +315,31 @@ sample_ports <- ports_base_long %>%
 # Note: semi-joins return just the original data.frame that has a match with a
 # second data.frame
 ports_base_sub <- ports_base_long %>%
-  semi_join(sample_ports, by = "Location") %>%
+  semi_join(sample_ports, by = "location") %>%
   ungroup() %>%
   mutate(seed_port = factor(seed_port,
-    levels = c("Caribbean port", "Source port"))) %>%
-  arrange(seed_port, Location, Time)
+    levels = c("Destination port", "Source port"))) %>%
+  arrange(seed_port, location, Time)
 
 # Separate out into 2 separate data.frames in order to plot in correct order
 ports_base_sub_seed <- ports_base_sub %>%
   filter(seed_port == "Source port")
 ports_base_sub_caribbean <- ports_base_sub %>%
-  filter(seed_port == "Caribbean port")
+  filter(seed_port == "Destination port")
 
 # Count how many source ports and Caribbean ports there are
 ports_seed_count <- ports_base_sub %>%
   group_by(seed_port) %>%
-  summarise(n = n_distinct(Location))
+  summarise(n = n_distinct(location))
 
 # Example time series plot for one iteration
 
 fig1a <- ggplot() +
-  facet_wrap(~Lifestage, scales = "free") +
+  facet_wrap(~lifestage, scales = "free") +
   geom_path(data = ports_base_sub_seed, aes(x = Time, y = log10Population,
-     group = Location, color = seed_port), lwd = 0.4) +
+     group = location, color = seed_port), lwd = 0.4) +
   geom_path(data = ports_base_sub_caribbean, aes(x = Time, y = log10Population,
-     group = Location, color = seed_port), lwd = 0.4) +
+     group = location, color = seed_port), lwd = 0.4) +
   scale_y_continuous(label = math_format(expr = 10 ^ .x, format = force)) +
   scale_x_datetime(expand = c(0.09, 0)) +
   scale_color_manual("Port\nstatus", values = custom_cols[c(6, 10)]) +
@@ -355,8 +357,8 @@ save_figures("fig1a_ports_time_series", width = col_2_wide,
 # for each location by lifestage
 
 ports_base_caribbean_invaded <- ports_base_sub_caribbean %>%
-  group_by(Lifestage, Location) %>%
-  arrange(Lifestage, Location, Time) %>%
+  group_by(lifestage, location) %>%
+  arrange(lifestage, location, Time) %>%
   mutate(pop_crash = (population > 0 & lead(population) <= 1))
 
 ports_base_caribbean_invaded_summary <- ports_base_caribbean_invaded %>%
@@ -367,15 +369,15 @@ ports_base_caribbean_invaded_summary <- ports_base_caribbean_invaded %>%
 # Number of failed populations
 ports_base_caribbean_invaded_summary %>%
   filter(!pop_all_zero) %>%
-  group_by(Lifestage, pop_fail) %>% tally()
+  group_by(lifestage, pop_fail) %>% tally()
 
 failed_populations <- ports_base_caribbean_invaded_summary %>%
   filter(!pop_all_zero) %>%
   left_join(ports_base_sub_caribbean, by = c("Lifestage", "Location")) %>%
-  arrange(Lifestage, Location, Time) %>%
-  ggplot(aes(Time, log10Population, color = pop_fail, group = Location)) +
+  arrange(lifestage, location, Time) %>%
+  ggplot(aes(Time, log10Population, color = pop_fail, group = location)) +
     geom_path() +
-    facet_wrap(~Lifestage, scales = "free") +
+    facet_wrap(~lifestage, scales = "free") +
     scale_y_continuous(label = formatter_standard) +
     scale_color_manual("Pop\nstatus", values = custom_cols[c(6, 10)]) +
     scale_x_datetime(expand = c(0.09, 0)) +
@@ -385,11 +387,11 @@ save_figures("fig1c_failed_populations", width = col_2_wide,
     height = fig_max_height, dpi = 600)
 
 fig1b <- ggplot() +
-  facet_wrap(~Lifestage, scales = "free") +
+  facet_wrap(~lifestage, scales = "free") +
   geom_path(data = ports_base_sub_seed, aes(x = Time, y = population,
-    group = Location, color = seed_port), lwd = 0.3) +
+    group = location, color = seed_port), lwd = 0.3) +
   geom_path(data = ports_base_sub_caribbean, aes(x = Time, y = population,
-    group = Location, color = seed_port), lwd = 0.3) +
+    group = location, color = seed_port), lwd = 0.3) +
   theme_cowplot() +
   scale_y_continuous(labels = formatter_standard) +
   scale_color_manual("Port\nstatus", values = custom_cols[c(6, 10)]) +
@@ -415,14 +417,14 @@ all_ports_df <- graph_data_preprocessing("all_ports_mean")
 # mean_population, log1-population, pop_category, seed_bioregion,
 # fw_effect, fw_reduction, `Source; FW reduction`
 
-caribbean_ports_lifestage_df <-
-  graph_data_preprocessing("caribbean_ports_daily_mean") %>%
+destination_ports_lifestage_df <-
+  graph_data_preprocessing("destination_ports_daily_mean") %>%
   select(date, bootstrap, location, `Source; FW reduction`,
       lifestage, mean_population) %>%
   arrange(location, date, bootstrap)
 
 # Sum up across lifestages to create total_population
-caribbean_ports_df <- caribbean_ports_lifestage_df %>%
+destination_ports_df <- destination_ports_lifestage_df %>%
   group_by(date, `Source; FW reduction`, bootstrap, location) %>%
   summarise(total_daily_population = sum(mean_population)) %>%
   ungroup()
@@ -431,7 +433,7 @@ caribbean_ports_df <- caribbean_ports_lifestage_df %>%
 # Calculates mean across locations to create mean_population for each bootstrap,
 # then summarises by mean again across bootstraps
 
-caribbean_ports_mean_all_df <- caribbean_ports_df %>%
+destination_ports_mean_all_df <- destination_ports_df %>%
   group_by(bootstrap, date, `Source; FW reduction`) %>%
   summarise(mean_population_across_locations = mean(total_daily_population)) %>%
   group_by(date, `Source; FW reduction`) %>%
@@ -439,7 +441,7 @@ caribbean_ports_mean_all_df <- caribbean_ports_df %>%
   arrange(`Source; FW reduction`, date)
 
 # Fix for reordering of treatments
-caribbean_ports_mean_all_df <- caribbean_ports_mean_all_df %>%
+destination_ports_mean_all_df <- destination_ports_mean_all_df %>%
   mutate(`Source; FW reduction` = as.character(`Source; FW reduction`)) %>%
   arrange(`Source; FW reduction`, date)
   
@@ -447,7 +449,7 @@ caribbean_ports_mean_all_df <- caribbean_ports_mean_all_df %>%
 # Same as above but keeps grouping by lifestage
 # First, calculate the mean across locations
 # Second, calculate mean and 95% CL across bootstraps
-caribbean_ports_mean_lifestage_df <- caribbean_ports_lifestage_df %>%
+destination_ports_mean_lifestage_df <- destination_ports_lifestage_df %>%
   mutate(`Source; FW reduction` = as.character(`Source; FW reduction`)) %>%
   group_by(lifestage, bootstrap, date, `Source; FW reduction`) %>%
   summarise(mean_population_across_locations = mean(mean_population)) %>%
@@ -456,17 +458,17 @@ caribbean_ports_mean_lifestage_df <- caribbean_ports_lifestage_df %>%
   summarise_at(vars(mean_population_across_locations), stats_summary_funs) %>%
   arrange(lifestage, `Source; FW reduction`, date)
 
-caribbean_ports_mean_lifestage_df <- caribbean_ports_mean_lifestage_df %>%
+destination_ports_mean_lifestage_df <- destination_ports_mean_lifestage_df %>%
 	ungroup() %>%
   mutate(`Source; FW reduction` = as.character(`Source; FW reduction`)) %>%
   arrange(lifestage, `Source; FW reduction`, date)
   
 
-rm(caribbean_ports_df, caribbean_ports_lifestage_df)
+rm(destination_ports_df, destination_ports_lifestage_df)
 
 # Plot of total population (summed across lifestages)
 
-fig2b <- ggplot(caribbean_ports_mean_all_df,
+fig2b <- ggplot(destination_ports_mean_all_df,
     aes(x = date, y = mean / 1e8, color = `Source; FW reduction`,
       group = `Source; FW reduction`)) +
   geom_ribbon(aes(colour = NA, fill = `Source; FW reduction`,
@@ -484,7 +486,7 @@ fig2b <- ggplot(caribbean_ports_mean_all_df,
   scale_y_continuous() +
   labs(x = "Time",
     y = expression(atop("Total population size ("%*%10^8*") in",
-            "Caribbean ports (mean with 95% CL)")))
+            "destination ports (mean with 95% CL)")))
 
 save_figures("fig2b_all_ports_mean_population_size", plot = fig2b,
   dpi = 600, height = col_1.5_wide, width = col_1.5_wide)
@@ -495,7 +497,7 @@ fig2b_no_legend <- fig2b +
 
 # Plot of population over time, grouped by lifestage
 
-fig2c <- ggplot(caribbean_ports_mean_lifestage_df,
+fig2c <- ggplot(destination_ports_mean_lifestage_df,
     aes(x = date, y = mean, color = `Source; FW reduction`,
       group = `Source; FW reduction`)) +
   facet_wrap(~lifestage, scales = "free_y") +
@@ -512,7 +514,7 @@ fig2c <- ggplot(caribbean_ports_mean_lifestage_df,
   scale_x_date(expand = c(0.1, 0)) +
   scale_y_continuous(labels = formatter_standard) +
   labs(x = "Time",
-    y = "Population size in Caribbean ports (mean with 95% CL)")
+    y = "Population size in destination ports (mean with 95% CL)")
 
 save_figures("fig2c_all_ports_mean_population_size",
   plot = fig2c, dpi = 600, width = col_2_wide, height = col_2_wide)
@@ -521,7 +523,7 @@ flog.info("Beginning Figure 3 data processing",
   name = "model_progress_log")
 
 caribbean_ports_count_df <-
-  graph_data_preprocessing("caribbean_ports_pooled_count") %>%
+  graph_data_preprocessing("destination_ports_pooled_count") %>%
   mutate(n_carI_ports = 202) %>%
   group_by(`Source; FW reduction`, date) %>%
   summarise_at(vars(n_invaded_ports), stats_summary_funs) %>%
@@ -549,13 +551,13 @@ fig3a <- ggplot(caribbean_ports_count_df,
   annotate("text", label = "n = 202 Caribbean ports",
     x = as.Date("2011-01-01"), y = 18, size = 5) +
   labs(x = "Time",
-    y = "Count of Caribbean ports\n with total population > 0")
+    y = "Count of destination ports\n with total population > 0")
 
 save_figures("fig3a_count_invaded_ports", plot = fig3a,  dpi = 600,
   height = col_1_wide, width = col_1_wide)
 
 caribbean_ports_proportion_df <-
-  graph_data_preprocessing("caribbean_ports_pooled_count") %>%
+  graph_data_preprocessing("destination_ports_pooled_count") %>%
   mutate(n_carI_ports = 202,
     `Source; FW reduction` = as.character(`Source; FW reduction`)) %>%
   group_by(`Source; FW reduction`, date) %>%
@@ -566,7 +568,7 @@ caribbean_ports_proportion_df <-
   # 5 bootstraps
     prop_ucl = pmax(0, prop_pooled + qt(0.975, 4) * prop_se)) %>%
   arrange(`Source; FW reduction`, date)
-    # Count of Caribbean ports = 202
+    # Count of destination ports = 202
 
 
 fig3b <- ggplot(caribbean_ports_proportion_df,
@@ -584,9 +586,9 @@ fig3b <- ggplot(caribbean_ports_proportion_df,
   guides(color = guide_legend(override.aes = list(size = 4, alpha = 1))) +
   scale_y_continuous(limits = c(0, 0.5)) +
   scale_x_date(expand = c(0.1, 0)) +
-  annotate("text", label = "n = 202 Caribbean ports",
+  annotate("text", label = "n = X destination ports",
      x = as.Date("2011-08-01"), y = 0.40, size = 3) +
-  labs(x = "Time", y = stri_c("Proportion of Caribbean ports with\n",
+  labs(x = "Time", y = stri_c("Proportion of destination ports with\n",
        "total population > 0 (mean with 95% CL)"))
 
 save_figures("fig3b_proportion_invaded_ports", plot = fig3b,
@@ -597,15 +599,17 @@ fig3b_no_legend <- fig3b +
 
 # Maps of ports invading ---------------------------------------------------------------
 
+# HARD CODED: FIXME
 partial_sample_datespan <- seq(1, 7301, by = 480)
+
 sample_date_plot <- as.Date(dimnames(ports_temp[[1]])[[1]][partial_sample_datespan])
 
 maps_data_filtered <- ports_base_long %>%
-  left_join(port_data, by = c("Location" = "PortStd", "REG_LRGGEO")) %>%
-  filter(Lifestage == "adult",
-    REG_LRGGEO %in% c("CAR-I", "CAR-II", "CAR-III", "CAR-IV", "CAR-V"),
+  left_join(port_data, by = c("location" = "portstd", "reg_lrggeo")) %>%
+  filter(lifestage == "adult",
+    reg_lrggeo %in% c("CAR-I", "CAR-II", "CAR-III", "CAR-IV", "CAR-V"),
     population > 0, date %in% sample_date_plot, !is.na(PortLatitudeStd),
-    !is.na(PortLongitudeStd), Location != "Panama Canal") %>%
+    !is.na(PortLongitudeStd), location != "Panama Canal") %>%
   rename(model_date = date) %>%
   ungroup()
 

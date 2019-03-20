@@ -9,17 +9,25 @@ library("dplyr")
 library("tidyr")
 library("forcats")
 library("ggplot2")
+library("yaml")
+library("rprojroot")
+ 
+root_crit <- has_dirname("PWS_2_5_west_coast_model", subdir = "src")
+root_dir <- root_crit$make_fix_file()
 
 options(tibble.width = Inf)
 
 # Set flags to run only certain part of the code
 animation_flag <- FALSE
+
+yaml_params <- yaml::read_yaml(file.path(root_dir(), "params.yaml"))
+
 source_region <- "foo" # Since foo will not be found, run all source_regions
 
 full_sample_datespan <- seq(1, 7301, by = 1)
-caribbean_bioregions <- c("CAR-I", "CAR-II", "CAR-III", "CAR-IV", "CAR-V",
-  "CAR-VI")
 
+seed_bioregions <- yaml_params[["params"]][["seed_bioregions"]]
+destination_bioregions <- yaml_params[["params"]][["destination_bioregions"]]
 
 # Define color palettes
 custom_cols <- c("#7D0112FF", "#A14C26FF", "#C17F45FF", "#DAAE6DFF",
@@ -132,20 +140,13 @@ save_figures <- function(filename, plot = ggplot2::last_plot(), units = "cm",  .
 # List to calculate summary statistics
 
 # This is used in dplyr to summarize specified variables
-stats_summary_funs <- funs(n = sum(!is.na(.)),
-  mean(., na.rm = TRUE),
-  sd(., na.rm = TRUE),
-  n_se = sd(., na.rm = TRUE) / sqrt(sum(!is.na(.))),
-  median(., na.rm = TRUE),
-  min(., na.rm = TRUE),
-  max(., na.rm = TRUE),
-  lcl = ifelse(sum(!is.na(.)) > 1, mean(., na.rm = TRUE) +
-      (qt(0.025, sum(!is.na(.)) - 1) * (sd(., na.rm = TRUE) /
-        sqrt(sum(!is.na(.))))), NA),
-  ucl = ifelse(sum(!is.na(.)) > 1, mean(., na.rm = TRUE) +
-    (qt(0.975, sum(!is.na(.)) - 1) * (sd(., na.rm = TRUE) /
-      sqrt(sum(!is.na(.))))), NA))
-
+stats_summary_funs <- list(n = ~sum(!is.na(.)),
+  mean = ~mean(., na.rm = TRUE),
+  sd = ~sd(., na.rm = TRUE),
+  n_se = ~sd(., na.rm = TRUE) / sqrt(sum(!is.na(.))),
+  median = ~median(., na.rm = TRUE),
+  min = ~min(., na.rm = TRUE),
+  max = ~max(., na.rm = TRUE))
 
 # Calculate pooled estimate and se for proportions
 prop_mean_fn <- function(x, n, na.rm = TRUE){
@@ -236,7 +237,7 @@ process_ports_fn <- function(i){
 
   flog.info("Processing ports file %s", i, name = "model_progress_log")
 
-  n_carI_ports <- readRDS(create_filelist_from_data("n_carI_ports", 1))
+  n_destination_ports <- readRDS(create_filelist_from_data("n_destination_ports", 1))
 
   flog.info("Started reading ports_temp", name = "model_progress_log")
   
@@ -270,12 +271,12 @@ process_ports_fn <- function(i){
 
 # Get source ports in order to exclude them from summary
 
-# Calculate mean daily population size for CAR-I to CAR-VI ports. Include
-# ports with 0 population, but exclude the Panama Canal.
+# Calculate mean daily population size for seed ports. Include
+# ports with 0 population.
 
   destination_ports_daily_mean <- ports_longformat_with_coords %>%
-    filter(seed_port == "non-seed port",
-      bioregion %in% caribbean_bioregions, location != "Panama Canal") %>%
+    filter(seed_port == "non-source port",
+      bioregion %in% seed_bioregions) %>%
     group_by(date, parameter, bootstrap, lifestage, location, port_country,
       bioregion, lat, lon) %>%
     summarize(mean_population = mean(population),
@@ -328,22 +329,22 @@ process_ports_fn <- function(i){
   invaded_ports_count <- destination_ports_daily_mean %>%
     filter(mean_population > 0) %>%
     group_by(date, parameter, bootstrap, lifestage) %>%
-    summarize(n_carI_ports, n_invaded_ports = n_distinct(location),
-      ports_proportion = n_distinct(location) / n_carI_ports) %>%
+    summarize(n_destination_ports, n_invaded_ports = n_distinct(location),
+      ports_proportion = n_distinct(location) / n_destination_ports) %>%
     ungroup()
 
   saveRDS(invaded_ports_count,
-    file = save_results_filename("caribbean_ports_count_", param_label))
+    file = save_results_filename("destination_ports_count_", param_label))
 
   invaded_ports_pooled_lifestages_count <- destination_ports_daily_mean %>%
     filter(mean_population > 0) %>%
     group_by(date, parameter, bootstrap) %>%
-    summarize(n_carI_ports, n_invaded_ports = n_distinct(location),
-      ports_proportion = n_distinct(location) / n_carI_ports) %>%
+    summarize(n_destination_ports, n_invaded_ports = n_distinct(location),
+      ports_proportion = n_distinct(location) / n_destination_ports) %>%
     ungroup()
 
   saveRDS(invaded_ports_pooled_lifestages_count,
-    file =  save_results_filename("caribbean_ports_pooled_count_", param_label))
+    file =  save_results_filename("destination_ports_pooled_count_", param_label))
 
   flog.info("Saving number of invaded ports", name = "model_progress_log")
 
@@ -385,7 +386,7 @@ process_port_immigration_fn <- function(i) {
   # Calculate population size. Note: Exclude Panama Canal from immigration
   # calculations
   port_immigration_daily_mean <- ports_immigration_with_coords %>%
-    filter(seed_port == "Caribbean port", bioregion %in% caribbean_bioregions,
+    filter(seed_port == "Caribbean port", bioregion %in% seed_bioregions,
       location != "Panama Canal") %>%
     group_by(date, parameter, bootstrap, lifestage, location, port_country,
       bioregion, lat, lon) %>%
@@ -618,7 +619,7 @@ port_mortality_summary_fn <- function(i, ports_instant_mortality_list){
     group_by(bootstrap, `Source; FW reduction`, date, location,
       bioregion) %>%
     summarise(total_population = sum(mean_population, na.rm = TRUE)) %>%
-    filter(total_population == 0, bioregion %in% caribbean_bioregions,
+    filter(total_population == 0, bioregion %in% seed_bioregions,
       location != "Panama Canal") %>%
     select(bootstrap, `Source; FW reduction`, date, location) %>%
     unique() %>%
@@ -628,7 +629,7 @@ port_mortality_summary_fn <- function(i, ports_instant_mortality_list){
 
   ports_instant_mortality_temp_df <- ports_instant_mortality_df_sub %>%
     # include only caribbean ports and not the Panama Canal
-    filter(bioregion %in% caribbean_bioregions,
+    filter(bioregion %in% seed_bioregions,
       seed_port == "Caribbean port", location != "Panama Canal") %>%
     # include only ports that have a zero total population on that date
     right_join(ports_zero_pop_names_df,
