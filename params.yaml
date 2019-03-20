@@ -4,10 +4,12 @@ params:
     - coastwise
     - all_traffic
   scenario: all_traffic
-  seed_bioregions: 
-    - NEP-IV
-    - NEP-V
-    - NEP_VI
+  seed_ports:
+   - seed_ports1
+   - seed_ports2
+  sp_name: 
+   - hypothetical_sp
+   - A_improvisus
   port_area: 1.0e+07
   max_density_individuals: 5.0e+3
   fw_reduction: 0.0
