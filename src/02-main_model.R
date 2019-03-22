@@ -178,7 +178,7 @@ port_immigration_fn <- function(ports_array = ports_array,
     ports_immigration_idx <- cube_match_fn(t1_date_global,
       A = port_immigration_input, y = port_immigration_total)
 
-    cube_fill_row(port_immigration_input, port_immigration_total,
+    fill_cube_dbl(port_immigration_input, port_immigration_total,
       ports_immigration_idx)
     }
   } # End of (if x > 1)
@@ -202,7 +202,7 @@ ship_emigration_fn <- function(ships_array, ships_invasion_prob,
     ship_emigration_idx <- cube_match_fn(t1_date_global,
       A = ship_emigration_input, y = ship_emigration_mat)
 
-    cube_fill_row(ship_emigration_input, ship_emigration_mat,
+    fill_cube_int(ship_emigration_input, ship_emigration_mat,
       ship_emigration_idx)
   }
   ship_emigration_input
@@ -291,7 +291,7 @@ ship_immigration_fn <- function(ships_pop,
         y = ship_immigration_size_subset)
 
     # Afill into 3-d array for ship_immigration
-      cube_fill_row(ship_immigration_input, ship_immigration_size_subset,
+      fill_cube_int(ship_immigration_input, ship_immigration_size_subset,
         ships_immnigration_idx)
     }
   }
@@ -790,7 +790,7 @@ for (t_global in seq_along(date_list_ext)) {
     if (t_global > 1) {
 
     # Population size for lifestages except juveniles
-      N_ports <- popgrow(port_pop_transition, ports_pop[(t_global - 1), , ])
+      N_ports <- popgrow_dbl(port_pop_transition, ports_pop[(t_global - 1), , ])
 
       dimnames(N_ports) <-
         list(dimnames(ports_pop)[[2]], dimnames(ports_pop)[[3]])
@@ -817,16 +817,15 @@ for (t_global in seq_along(date_list_ext)) {
       ports_logit_factor[which(dimnames(ports_logit_factor)[[1]] %in%
         c("larva", "cyprid")), ] <- 1
 
-      # Prevent 'negative' populations by setting a lower limit of 0.
-      temp_ports_pop <- pmax(ceiling(N_ports * ports_logit_factor +
-                  port_immigration[(t_global - 1), , ]), 0, na.rm = TRUE)
-
+      temp_ports_pop <- N_ports * ports_logit_factor +
+                  port_immigration[(t_global - 1), , ]
+      
       # Adjust for error where population persists when only 2 individuals are
       # left
-      
-      # CHECK ON THIS
-      temp_ports_pop[temp_ports_pop[] <= 2] <- 0
+      temp_ports_pop[temp_ports_pop < 2] <- 0
 
+ 					# Round up to nearest integer
+ 					temp_ports_pop <- ceiling(temp_ports_pop)
       stopifnot(!is.null(dimnames(temp_ports_pop)[[2]]))
 
     } else {
@@ -836,11 +835,10 @@ for (t_global in seq_along(date_list_ext)) {
 
     ports_pop_idx <-  cube_match_fn(t_date_global, ports_pop, temp_ports_pop)
 
-    cube_fill_row(ports_pop, temp_ports_pop, ports_pop_idx)
+    fill_cube_dbl(ports_pop, temp_ports_pop, ports_pop_idx)
 
     ports_trace_pop <-
-      apply(temp_ports_pop[, dimnames(temp_ports_pop)[[2]] %nin% seed_ports], 1,
-        mean)
+      rowMeans(temp_ports_pop[, dimnames(temp_ports_pop)[[2]] %nin% seed_ports])
 
     flog.trace("parameter%s port_population %i %f %f %f %f", sprintf("%.03d",
       param_iter), t_global, ports_trace_pop[1], ports_trace_pop[2],
@@ -869,9 +867,8 @@ for (t_global in seq_along(date_list_ext)) {
 
     if (t_global > 1) {
       # Model population growth
-      browser()
-      
-      N_ships <- popgrow(ship_pop_transition, ships_pop[(t_global - 1), , ])
+
+      N_ships <- popgrow_int(ship_pop_transition, ships_pop[(t_global - 1), , ])
 
       dimnames(N_ships) <- list(dimnames(ships_pop)[[2]],
         dimnames(ships_pop)[[3]])
@@ -882,24 +879,31 @@ for (t_global in seq_along(date_list_ext)) {
         c("larva", "cyprid")), ] <- 1
 
 						# Convert to integer
-						# FIXME
-      temp_ships_pop <- pmax(ceiling(N_ships * ships_logit_factor -
+      temp_ships_pop <- N_ships * ships_logit_factor -
         ship_emigration[(t_global - 1), , ] +
-        ship_immigration[(t_global - 1), , ]), 0, na.rm = TRUE)
+        ship_immigration[(t_global - 1), , ]
+      
+      # Sanity check for negative population size
+      
+      temp_ships_pop[temp_ships_pop < 0] <- 0
+      
+      # Round up and convert to integer
+      temp_ships_pop <- ceiling(temp_ships_pop)
+      #storage.mode(temp_ships_pop) <- "integer"
 
     } else {
       # In the first time slice, so no t-1 time position
       temp_ships_pop <- ships_pop[t_global, , ]
+      #storage.mode(temp_ships_pop) <- "integer"
     }
 
     ships_pop_idx <- cube_match_fn(t_date_global, ships_pop, temp_ships_pop)
 
-    cube_fill_row(ships_pop, temp_ships_pop, ships_pop_idx)
+    fill_cube_int(ships_pop, temp_ships_pop, ships_pop_idx)
 
-    temp_ships_pop[temp_ships_pop == 0] <- NA
-
-    ships_trace_pop <- apply(temp_ships_pop, 1,
-      function(x) max(x, na.rm = TRUE))
+    ships_trace_pop <- matrixStats::rowMaxs(temp_ships_pop)
+  
+    names(ships_trace_pop) <- dimnames(temp_ships_pop)[[1]]
 
     flog.trace("parameter%s ships_population %i %f %f %f %f", sprintf("%.03d",
       param_iter), t_global, ships_trace_pop[1], ships_trace_pop[2],

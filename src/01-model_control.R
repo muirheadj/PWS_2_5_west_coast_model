@@ -68,7 +68,7 @@ table <- function(..., useNA = "always") base::table(..., useNA = useNA)
 # Set up tracer and info loggers
 
 log_name <- function(x) file.path(root_dir(), "logs",
-	sprintf("parameter%03d_%s", as.numeric(param_iter[1]), "_", x))
+	sprintf("parameter%03d_%s", as.numeric(param_iter[1]), x))
 
 flog.logger(name = "ports_pop_trace", TRACE,
   appender = appender.tee(log_name("ports_pop_trace.log")))
@@ -82,10 +82,13 @@ flog.logger(name = "ships_pop_trace", TRACE,
   appender = appender.tee(log_name("ships_pop_trace.log")))
 flog.logger(name = "ports_instant_mortality_trace", TRACE,
   appender = appender.tee(log_name("ports_instant_mortality_trace.log")))
-
+flog.logger(name = "ships_emigration_trace", TRACE,
+  appender = appender.tee(log_name("ships_emigration_trace.log")))
+  
 flog.threshold(TRACE, name = "ports_pop_trace")
 flog.threshold(TRACE, name = "ports_n_trace")
 flog.threshold(TRACE, name = "juve_lag")
+flog.threshold(TRACE, name = "ships_emigration_trace")
 flog.threshold(TRACE, name = "ships_pop_trace")
 flog.threshold(TRACE, name = "ports_instant_mortality_trace")
 
@@ -223,7 +226,7 @@ seed_ports_fn <- function(param, seed_names, ports_pop_input, lifestages){
               port_data[["port"]]) == TRUE, name = "model_progress.log")
 
   seed_ports_df <- port_data[port_data$port %in%
-      seed_names &
+      seed_names$port &
       port_data$port %in% dimnames(ports_pop_input)[[3]], ] %>%
     arrange(port)
 
