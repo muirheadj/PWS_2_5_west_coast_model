@@ -30,10 +30,10 @@ find_date_in_position_fn <- function(date, ship_position) {
 # providing a date for the row. Indices are 0-based for use with c++.
 cube_match_fn <- function(global_date, A, y) {
   match_date <- match(global_date, dimnames(A)[[1]])
-    idx_match2 <- match(rownames(y), dimnames(A)[[2]])
-    idx_match3 <- match(colnames(y), dimnames(A)[[3]])
-    c_idx <- as.matrix(expand.grid(match_date, idx_match2, idx_match3) - 1)
-    c_idx
+  idx_match2 <- match(rownames(y), dimnames(A)[[2]])
+  idx_match3 <- match(colnames(y), dimnames(A)[[3]])
+  c_idx <- as.matrix(expand.grid(match_date, idx_match2, idx_match3) - 1)
+  c_idx
 }
 
 # Enter all the parameters necessary for each of the sub functions in
@@ -180,13 +180,12 @@ port_immigration_fn <- function(ports_array = ports_array,
 
     cube_fill_row(port_immigration_input, port_immigration_total,
       ports_immigration_idx)
-
     }
   } # End of (if x > 1)
   port_immigration_input
 }  # End of port immigration density function
 
-# SHIP EMIGRATION
+# SHIP EMIGRATION --------------------------------------------------------------
 ship_emigration_fn <- function(ships_array, ships_invasion_prob,
   lifestage_vec = ship_to_port_lifestages, x = t_global,
   ship_emigration_input = ship_emigration) {
@@ -209,7 +208,7 @@ ship_emigration_fn <- function(ships_array, ships_invasion_prob,
   ship_emigration_input
 }
 
-# SHIP IMMIGRATION OF JUVENILES
+# SHIP IMMIGRATION OF JUVENILES ------------------------------------------------
 ship_immigration_fn <- function(ships_pop,
   lifestage_vec = port_to_ship_lifestages,
   port_emigration = port_cyprid_compentency,
@@ -403,7 +402,6 @@ ships_underway_larval_reduction_fn <- function(ships_pop_input, x,
 
 # Pre-allocate arrays for port and ship emigration and immigration
 
-
 port_cyprid_compentency <- array(0L, dim = dim(ports_pop),
   dimnames = dimnames(ports_pop))
 port_immigration <- array(0L, dim = dim(ports_pop),
@@ -492,7 +490,6 @@ main_model_fn <- function(ship_imo_tbl, param_grid, A_mat, ports_pop, ...) {
     res <- names(x[x > 0])
     res
   }
-
 
 for (t_global in seq_along(date_list_ext)) {
 
@@ -754,8 +751,8 @@ for (t_global in seq_along(date_list_ext)) {
 
     # Freshwater reduction for ships in the Panama Canal
     if (t_global > 1) {
-      ships_pop <- fw_reduction_fn(ships_pop, x = t_global, ship_position,
-        t1_position_idx, fw_reduction)
+      #ships_pop <- fw_reduction_fn(ships_pop, x = t_global, ship_position,
+       #t1_position_idx, fw_reduction)
 
     # Reduction of larval and cyprid stages to zero when ship is underway
       ships_pop <- ships_underway_larval_reduction_fn(ships_pop,
@@ -770,7 +767,6 @@ for (t_global in seq_along(date_list_ext)) {
       port_lifehistory_input = port_lifehistory_status)
 
      # Ship emigration
-     # REACHES MEMORY LIMIT HERE
     ship_emigration <- ship_emigration_fn(ships_pop, ships_invasion_prob,
       lifestage_vec = ship_to_port_lifestages, x = t_global,
       ship_emigration_input = ship_emigration)
@@ -827,6 +823,8 @@ for (t_global in seq_along(date_list_ext)) {
 
       # Adjust for error where population persists when only 2 individuals are
       # left
+      
+      # CHECK ON THIS
       temp_ports_pop[temp_ports_pop[] <= 2] <- 0
 
       stopifnot(!is.null(dimnames(temp_ports_pop)[[2]]))
@@ -871,6 +869,8 @@ for (t_global in seq_along(date_list_ext)) {
 
     if (t_global > 1) {
       # Model population growth
+      browser()
+      
       N_ships <- popgrow(ship_pop_transition, ships_pop[(t_global - 1), , ])
 
       dimnames(N_ships) <- list(dimnames(ships_pop)[[2]],
@@ -881,6 +881,8 @@ for (t_global in seq_along(date_list_ext)) {
       ships_logit_factor[which(dimnames(ships_logit_factor)[[1]] %in%
         c("larva", "cyprid")), ] <- 1
 
+						# Convert to integer
+						# FIXME
       temp_ships_pop <- pmax(ceiling(N_ships * ships_logit_factor -
         ship_emigration[(t_global - 1), , ] +
         ship_immigration[(t_global - 1), , ]), 0, na.rm = TRUE)
@@ -890,7 +892,7 @@ for (t_global in seq_along(date_list_ext)) {
       temp_ships_pop <- ships_pop[t_global, , ]
     }
 
-    ships_pop_idx <-  cube_match_fn(t_date_global, ships_pop, temp_ships_pop)
+    ships_pop_idx <- cube_match_fn(t_date_global, ships_pop, temp_ships_pop)
 
     cube_fill_row(ships_pop, temp_ships_pop, ships_pop_idx)
 
@@ -942,28 +944,42 @@ param <- list(parameter = sprintf("parameter%.03d", param_iter),
   port_compentency_prob = port_compentency_prob
   )
 
-saveRDS(param, file = paste0(results_dir, "/", "Parameters_",
-  Sys.Date(), ".RData"))
+saveRDS(param, file = file.path(results_dir, sprintf("Parameters_%s%s",
+  Sys.Date(), ".RData")))
+
 flog.info("Parameters saved", name = "model_progress.log")
-saveRDS(ports_pop, file = paste0(results_dir, "/", "ports_pop_",
-  Sys.Date(), ".RData"))
+
+saveRDS(ports_pop, file = file.path(results_dir,
+  sprintf("ports_pop_%s%s", Sys.Date(), ".RData")))
+
 flog.info("ports_pop saved", name = "model_progress.log")
-saveRDS(ships_pop, file = paste0(results_dir, "/", "ships_pop_",
-  Sys.Date(), ".RData"))
+
+saveRDS(ships_pop, file = file.path(results_dir,
+  sprintf("ships_pop_%s%s", Sys.Date(), ".RData")))
+
 flog.info("ships_pop saved", name = "model_progress.log")
-saveRDS(port_cyprid_compentency, file = paste0(results_dir, "/",
-  "port_cyprid_compentency_", Sys.Date(), ".RData"))
+
+saveRDS(port_cyprid_compentency, file = file.path(results_dir, 
+  sprintf("port_cyprid_compentency_%s%s", Sys.Date(), ".RData")))
+
 flog.info("port_emigration saved", name = "model_progress.log")
-saveRDS(port_immigration, file = paste0(results_dir, "/", "port_immigration_",
-  Sys.Date(), ".RData"))
+
+saveRDS(port_immigration, file = file.path(results_dir,
+  sprintf("port_immigration_%s%s", Sys.Date(), ".RData")))
+
 flog.info("port_immigration saved", name = "model_progress.log")
-saveRDS(ship_emigration, file = paste0(results_dir, "/", "ship_emigration_",
-  Sys.Date(), ".RData"))
+
+saveRDS(ship_emigration, file = file.path(results_dir,
+  sprintf("ship_emigration_%s%s", Sys.Date(), ".RData")))
+
 flog.info("ship_emigration saved", name = "model_progress.log")
-saveRDS(ship_immigration, file = paste0(results_dir, "/", "ship_immigration_",
-  Sys.Date(), ".RData"))
-saveRDS(ports_instant_mortality, file = paste0(results_dir, "/",
-  "ports_instant_mortality_", Sys.Date(), ".RData"))
+
+saveRDS(ship_immigration, file = file.path(results_dir,
+  sprintf("ship_immigration_%s%s", Sys.Date(), ".RData")))
+
+saveRDS(ports_instant_mortality, file = file.path(results_dir,
+  sprintf("ports_instant_mortality_%s%s", Sys.Date(), ".RData")))
+
 flog.info("ports_instant_mortality saved", name = "model_progress.log")
 
 }  # End of main_model_fn statement

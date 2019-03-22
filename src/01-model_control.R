@@ -67,8 +67,8 @@ table <- function(..., useNA = "always") base::table(..., useNA = useNA)
 
 # Set up tracer and info loggers
 
-log_name <- function(x) paste0("parameter",
-  sprintf("%03d", as.numeric(param_iter[1])), "_", x)
+log_name <- function(x) file.path(root_dir(), "logs",
+	sprintf("parameter%03d_%s", as.numeric(param_iter[1]), "_", x))
 
 flog.logger(name = "ports_pop_trace", TRACE,
   appender = appender.tee(log_name("ports_pop_trace.log")))
@@ -84,10 +84,10 @@ flog.logger(name = "ports_instant_mortality_trace", TRACE,
   appender = appender.tee(log_name("ports_instant_mortality_trace.log")))
 
 flog.threshold(TRACE, name = "ports_pop_trace")
-flog.threshold(WARN, name = "ports_n_trace")
-flog.threshold(WARN, name = "juve_lag")
-flog.threshold(WARN, name = "ships_pop_trace")
-flog.threshold(WARN, name = "ports_instant_mortality_trace")
+flog.threshold(TRACE, name = "ports_n_trace")
+flog.threshold(TRACE, name = "juve_lag")
+flog.threshold(TRACE, name = "ships_pop_trace")
+flog.threshold(TRACE, name = "ports_instant_mortality_trace")
 
 # Identify species
 sp_name <- yaml_params[["params"]][["sp_name"]]
@@ -266,10 +266,9 @@ ports_pop <- seed_ports_fn(param = parameter_grid[param_iter, ],
 
 source(file.path(root_dir(), "src", "02-main_model.R"))
 
-# Run main model
+# Run main model ---------------------------------------------------------------
 
-sourceCpp(file.path(root_dir(), "src", "arma_cube.cpp"), verbose = TRUE,
-          rebuild = TRUE)
+sourceCpp(file.path(root_dir(), "src", "arma_cube.cpp"), verbose = FALSE)
 
 
 model_run <- main_model_fn(ship_imo_tbl, param = parameter_grid[param_iter, ],
