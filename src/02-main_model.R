@@ -409,8 +409,7 @@ port_immigration <- array(0L, dim = dim(ports_pop),
 ship_emigration <- array(0L, dim = dim(ships_pop),
   dimnames = dimnames(ships_pop))
 ship_immigration <- array(0L, dim = dim(ships_pop),
-  dimnames = dimnames(ships_pop))
-
+	dimnames = dimnames(ships_pop))
 
 # MAIN MODEL BEGINS #-----------------------------------------------------------
 main_model_fn <- function(ship_imo_tbl, param_grid, A_mat, ports_pop, ...) {
@@ -462,7 +461,7 @@ main_model_fn <- function(ship_imo_tbl, param_grid, A_mat, ports_pop, ...) {
   # Generate hybrid indicies to read the ff arrays
   hi_ship <- 1:dim(k_ships)[2]  # Index for ships
   hi_port <- 1:dim(ports_pop)[3]  # Index for ports
-  hi_t1 <- 1:50  # Index for time slices 1:50
+  hi_t1 <- 1:50  # Index for time slices 1:50\
   hi_t2 <- 51:100  # Index for time slices 51:100
 
   last_chunk <- tail(date_list_ext_chunks, 1)
@@ -819,7 +818,7 @@ for (t_global in seq_along(date_list_ext)) {
 
       temp_ports_pop <- N_ports * ports_logit_factor +
                   port_immigration[(t_global - 1), , ]
-      
+
       # Adjust for error where population persists when only 2 individuals are
       # left
       temp_ports_pop[temp_ports_pop < 2] <- 0
@@ -882,27 +881,25 @@ for (t_global in seq_along(date_list_ext)) {
       temp_ships_pop <- N_ships * ships_logit_factor -
         ship_emigration[(t_global - 1), , ] +
         ship_immigration[(t_global - 1), , ]
-      
+
       # Sanity check for negative population size
-      
+
       temp_ships_pop[temp_ships_pop < 0] <- 0
-      
+
       # Round up and convert to integer
       temp_ships_pop <- ceiling(temp_ships_pop)
-      #storage.mode(temp_ships_pop) <- "integer"
 
     } else {
       # In the first time slice, so no t-1 time position
       temp_ships_pop <- ships_pop[t_global, , ]
-      #storage.mode(temp_ships_pop) <- "integer"
     }
 
     ships_pop_idx <- cube_match_fn(t_date_global, ships_pop, temp_ships_pop)
 
     fill_cube_int(ships_pop, temp_ships_pop, ships_pop_idx)
 
-    ships_trace_pop <- matrixStats::rowMaxs(temp_ships_pop)
-  
+    ships_trace_pop <- matrixStats::rowMeans2(temp_ships_pop)
+
     names(ships_trace_pop) <- dimnames(temp_ships_pop)[[1]]
 
     flog.trace("parameter%s ships_population %i %f %f %f %f", sprintf("%.03d",
@@ -963,7 +960,7 @@ saveRDS(ships_pop, file = file.path(results_dir,
 
 flog.info("ships_pop saved", name = "model_progress.log")
 
-saveRDS(port_cyprid_compentency, file = file.path(results_dir, 
+saveRDS(port_cyprid_compentency, file = file.path(results_dir,
   sprintf("port_cyprid_compentency_%s%s", Sys.Date(), ".RData")))
 
 flog.info("port_emigration saved", name = "model_progress.log")
