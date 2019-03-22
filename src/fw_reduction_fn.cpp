@@ -72,38 +72,3 @@ extern "C" SEXP fw_reduction_Cpp(SEXP Rship_pop, SEXP tt, SEXP Ps, SEXP pt, SEXP
 
     return wrap(shipsArray);
 }
-
-
-/*** R
-ships_pop_array <- array(rep(1:12, length = 36), dim = c(3,4,3), dimnames = list(letters[1:3], letters[4:7],LETTERS[4:6]))
-
-position_array <- array(c(1,NA,NA,NA,1,NA,NA,NA,1,NA,NA,NA,1,1,NA,NA,NA,1,NA,NA,1,NA,1,NA,1,NA,NA),
-  dim = c(3,3,3), dimnames = list(LETTERS[4:6], letters[1:3], letters[4:6]))
-
-fw_reduction_fn <- function(ships_pop_input, x, position_array, t1_position_idx, fw_reduction){
-  # Get names of ships that are in the Panama Canal at time t-1
-  position_array_pc <- position_array[ , 2, t1_position_idx, drop = TRUE]
-  ship_names_pc <- names(position_array_pc[!is.na(position_array_pc)])
-
-  if(!is.null(ship_names_pc)){
-    ships_pop_input[x-1, , dimnames(ships_pop_input)[[3]] %in% ship_names_pc] <- fw_reduction *
-      ships_pop_input[x-1, , dimnames(ships_pop_input)[[3]] %in% ship_names_pc]
-  }
-  ships_pop_input
-}
-
-# Pretend that t = 2
-shipsCpp <- fw_reduction_Cpp(ships_pop_array, 3, position_array, 2, 0.1)
-shipsR <- fw_reduction_fn(ships_pop_array, 3, position_array, t1_position_idx = 2, fw_reduction = 0.1)
-
-library(rbenchmark)
-
-my_check <- function(values) {
-  all(sapply(values[-1], function(x) identical(values[[1]], x)))
-}
-
-res <- benchmark(shipsCpp <- fw_reduction_Cpp(ships_pop_array, 3, position_array, 2, 0.1),
-  shipsR <- fw_reduction_fn(ships_pop_array, 3, position_array, t1_position_idx = 2, fw_reduction = 0.1),
-  columns = c("test", "replications", "elapsed", "relative"), replications = 1000L)
-res
-*/

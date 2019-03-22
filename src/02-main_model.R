@@ -5,6 +5,8 @@
 # Author: jmuirhead
 ################################################################################
 
+# Helper functions
+
 find_date_in_chunk_fn <- function(date_slice, date_list_ext_chunks) {
   # This function finds out which chunk a particular date is in.  The 'name' of
   # vector is the chunk name, and its value is the position within that chunk
@@ -21,6 +23,17 @@ find_date_in_position_fn <- function(date, ship_position) {
   date <- as.character(date)
   t1 <- match(date, dimnames(ship_position)[[3]])
   t1
+}
+
+
+# This function matches the names of an 3-D array and a matrix, when
+# providing a date for the row. Indices are 0-based for use with c++.
+cube_match_fn <- function(global_date, A, y) {
+  match_date <- match(global_date, dimnames(A)[[1]])
+    idx_match2 <- match(rownames(y), dimnames(A)[[2]])
+    idx_match3 <- match(colnames(y), dimnames(A)[[3]])
+    c_idx <- as.matrix(expand.grid(match_date, idx_match2, idx_match3) - 1)
+    c_idx
 }
 
 # Enter all the parameters necessary for each of the sub functions in
@@ -48,7 +61,7 @@ ship_and_port_names_from_ship_position <- function(ship_position, time_index){
   port_and_ship_names
 }
 
-# PORT CYPRID COMPENTENCY
+# PORT CYPRID COMPENTENCY ------------------------------------------------------
 port_cyprid_compentency_fn <- function(ports_array = ports_array,
   port_competency_proportion = port_compentency_prob,
   lifestage_vec = port_to_ship_lifestages, x = t_global,
@@ -95,7 +108,7 @@ port_cyprid_compentency_fn <- function(ports_array = ports_array,
   port_emigration_input
 }
 
-# PORT IMMIGRATION
+# PORT IMMIGRATION -------------------------------------------------------------
 port_immigration_fn <- function(ports_array = ports_array,
   lifestage_vec = ship_to_port_lifestages,
   ship_emigration = ship_emigration, ship_position = ship_position,
@@ -105,6 +118,7 @@ port_immigration_fn <- function(ports_array = ports_array,
 
   # Make sure to use ship position from t_global - 1
   if (x > 1) {
+    t1_global <- x - 1
     port_names <-
       ship_and_port_names_from_ship_position(ship_position, t1)[["port_names"]]
 
@@ -115,7 +129,7 @@ port_immigration_fn <- function(ports_array = ports_array,
     # Get output of emigration for each lifestage from each of the ships
     # ship = rows , lifestage = columns
 
-    ship_emigration_t <- t(as.matrix(x = ship_emigration[(x - 1),,
+    ship_emigration_t <- t(as.matrix(x = ship_emigration[t1_global, ,
       match(ship_names, dimnames(ship_emigration)[[3]]), drop = TRUE] *
         lifestage_vec, rownames.force = TRUE))
 
@@ -139,23 +153,34 @@ port_immigration_fn <- function(ports_array = ports_array,
     # Add stochastic establishment for larva
     prob_establishment <- 1 - exp(-1e-5 * port_immigration_total[1, ])
 
-    p_random_inst_mort <- runif(n = length(prob_establishment), min = 0, max = 1)
+    p_random_inst_mort <- runif(n = length(prob_establishment), min = 0,
+      max = 1)
 
   # Add in environmental matching for each port
-    browser()
-    port_immigration_total[1, ] <- prob_habitat_suitability *
-  	   port_immigration_total[1, ]
+    names(ports_habitat_suitability) %in% colnames(port_immigration_total)
+
+    ports_habitat_suitability_sub <-
+      ports_habitat_suitability[names(ports_habitat_suitability) %in%
+        colnames(port_immigration_total)]
+
+    port_immigration_total[1, ] <- ports_habitat_suitability_sub *
+       port_immigration_total[1, ]
 
   # Keep track of instant mortality for ports
 
-    ports_instant_mortality[(x - 1), match(names(prob_establishment),
-      colnames(ports_instant_mortality))] <<- (p_random_inst_mort < prob_establishment)
+    ports_instant_mortality[t1_global, match(names(prob_establishment),
+        colnames(ports_instant_mortality))] <<-
+      (p_random_inst_mort < prob_establishment)
 
     port_immigration_total[1, ] <- (p_random_inst_mort < prob_establishment) *
       port_immigration_total[1, ]
 
-    afill(port_immigration_input, t1_date_global,,, local = TRUE) <-
-      port_immigration_total
+    ports_immigration_idx <- cube_match_fn(t1_date_global,
+      A = port_immigration_input, y = port_immigration_total)
+
+    cube_fill_row(port_immigration_input, port_immigration_total,
+      ports_immigration_idx)
+
     }
   } # End of (if x > 1)
   port_immigration_input
@@ -170,11 +195,16 @@ ship_emigration_fn <- function(ships_array, ships_invasion_prob,
   # from the previous time step.
 
   if (x > 1) {
-    ship_emigration_mat <- ceiling(outer(lifestage_vec, ships_invasion_prob) *
-            ships_array[(x - 1),,, drop = TRUE])
+    t1_global <- x - 1
 
-    afill(ship_emigration_input, t1_date_global,,, local = TRUE) <-
-      ship_emigration_mat
+    ship_emigration_mat <- ceiling(outer(lifestage_vec, ships_invasion_prob) *
+      ships_array[t1_global, , , drop = TRUE])
+
+    ship_emigration_idx <- cube_match_fn(t1_date_global,
+      A = ship_emigration_input, y = ship_emigration_mat)
+
+    cube_fill_row(ship_emigration_input, ship_emigration_mat,
+      ship_emigration_idx)
   }
   ship_emigration_input
 }
@@ -184,10 +214,12 @@ ship_immigration_fn <- function(ships_pop,
   lifestage_vec = port_to_ship_lifestages,
   port_emigration = port_cyprid_compentency,
   ship_position = ship_position, t1 = t1_position_idx,
-  ship_immigration_input = ship_immigration, x = t_global,
-  ships_instant_mortality) {
+  ship_immigration_input = ship_immigration, x = t_global) {
+
 
   if (x > 1) {
+    t1_global <- x - 1
+
     port_names <-
       ship_and_port_names_from_ship_position(ship_position, t1)[["port_names"]]
     ship_names <-
@@ -195,7 +227,7 @@ ship_immigration_fn <- function(ships_pop,
 
     # Get port emigration at time t-1
 
-    port_emigration_temp <- data.frame(t(port_emigration[(x - 1), , ] *
+    port_emigration_temp <- data.frame(t(port_emigration[t1_global, , ] *
       lifestage_vec), stringsAsFactors = FALSE)
 
     names(port_emigration_temp) <- paste0(names(port_emigration_temp), "_emigr")
@@ -215,17 +247,14 @@ ship_immigration_fn <- function(ships_pop,
     # frac_transferred is the random proportion that is able to be transferred
     # to the ship
 
-
-### CHECK ON THIS
-
       port_to_ship_migration_proportion <- port_ship_migration %>%
-      left_join(ship_imo_tbl, by = c(ships = "lrnimoshipno")) %>%
-      select(-gt, -nrt) %>%
-      group_by(ports) %>%
-      mutate(frac_transferred = rbinom(1, size = 1000, prob = 0.04) / 1000) %>%
-      mutate(wsa_scale = effective_wsa / sum(effective_wsa, port_area,
-        na.rm = TRUE)) %>%
-      ungroup()
+        left_join(ship_imo_tbl, by = c("ships" = "lrnoimoshipno")) %>%
+        group_by(ports) %>%
+        mutate(
+          frac_transferred = rbinom(1, size = 1000, prob = 0.04) / 1000) %>%
+        mutate(wsa_scale = effective_wsa / sum(effective_wsa, port_area,
+          na.rm = TRUE)) %>%
+        ungroup()
 
     # The number of new juveniles is the available pool scaled by relative
     # surface area and the probability of setting rounded up to the nearest
@@ -236,31 +265,35 @@ ship_immigration_fn <- function(ships_pop,
 
 
     # Add stochastic establishment for juveniles
-    prob_establishment <- 1 - exp(-1e-5 *
-      port_to_ship_migration_size[["juvenile"]])
-    p_random <- runif(n = length(prob_establishment), min = 0, max = 1)
+      prob_establishment <- 1 - exp(-1e-5 *
+        port_to_ship_migration_size[["juvenile"]])
+      p_random <- runif(n = length(prob_establishment), min = 0, max = 1)
 
     # Keep track of instant mortality on ships
-    ships_instant_mortality[match(names(prob_establishment),
-      rownames(ships_instant_mortality)),
-    (x - 1)] <<- (p_random < prob_establishment)
+    #ships_instant_mortality[match(names(prob_establishment),
+    #  rownames(ships_instant_mortality)),
+    #(x - 1)] <<- (p_random < prob_establishment)
 
-    port_to_ship_migration_size[["juvenile"]] <-
-    (p_random < prob_establishment) * port_to_ship_migration_size[["juvenile"]]
+      port_to_ship_migration_size[["juvenile"]] <-
+        (p_random < prob_establishment) *
+          port_to_ship_migration_size[["juvenile"]]
 
    # Reshape into a matrix
 
-    ship_immigration_size_subset <- port_to_ship_migration_size %>%
-      ungroup() %>%
-      select(ships, juvenile) %>%
-      melt(value.name = "pop", id.vars = "ships") %>%
-      acast(variable ~ ships, value.var = "pop",
-        fun.aggregate = function(x) sum(x, na.rm = TRUE), drop = FALSE)
+      ship_immigration_size_subset <- port_to_ship_migration_size %>%
+        ungroup() %>%
+        select(ships, juvenile) %>%
+        melt(value.name = "pop", id.vars = "ships") %>%
+        acast(variable ~ ships, value.var = "pop",
+          fun.aggregate = function(x) sum(x, na.rm = TRUE), drop = FALSE)
 
+      ships_immnigration_idx <- cube_match_fn(t1_date_global,
+        A = ship_immigration_input,
+        y = ship_immigration_size_subset)
 
     # Afill into 3-d array for ship_immigration
-     afill(ship_immigration_input, t1_date_global,,, local = TRUE) <-
-       ship_immigration_size_subset
+      cube_fill_row(ship_immigration_input, ship_immigration_size_subset,
+        ships_immnigration_idx)
     }
   }
   ship_immigration_input
@@ -273,6 +306,8 @@ port_juvenile_production_fn <- function(ports_pop,
   t1 = t1_position_idx, x = t_global){
 
   if (x > 1) {
+    t1_global <- x - 1
+
     port_names <-
       ship_and_port_names_from_ship_position(ship_position, t1)[["port_names"]]
 
@@ -280,7 +315,7 @@ port_juvenile_production_fn <- function(ports_pop,
       ship_and_port_names_from_ship_position(ship_position, t1)[["ship_names"]]
 
     # Get port emigration at time t-1
-    port_emigration_temp <- data.frame(t(port_emigration[(x - 1),, ] *
+    port_emigration_temp <- data.frame(t(port_emigration[t1_global,, ] *
       lifestage_vec), stringsAsFactors = FALSE)
 
     names(port_emigration_temp) <- paste0(names(port_emigration_temp), "_emigr")
@@ -290,8 +325,8 @@ port_juvenile_production_fn <- function(ports_pop,
       combined_port_ship_names <- data.frame(ships = ship_names,
         ports = port_names, stringsAsFactors = FALSE)
 
-     port_port_juve_production <- right_join(combined_port_ship_names,
-      port_emigration_temp, by = "ports")
+      port_port_juve_production <- right_join(combined_port_ship_names,
+        port_emigration_temp, by = "ports")
 
     # Allocate amount to ships within each port
     # WSA scale is a scalar of the number of cyprids available weighted by the
@@ -299,29 +334,28 @@ port_juvenile_production_fn <- function(ports_pop,
     # frac_transferred is the random proportion that is able to be transferred
     # to the ship
 
-     port_port_juvenile_proportion <- port_port_juve_production %>%
-       left_join(ship_imo_tbl, by = c(ships = "lrnoimoshipno")) %>%
-       select(-GT, -Nrt) %>%
-       group_by(ports) %>%
-       mutate(wsa_scale = port_area / sum(effective_wsa, port_area,
-        na.rm = TRUE),
-       frac_transferred = rbinom(1, size = 1000, prob = 0.04) / 1000)
+      port_port_juvenile_proportion <- port_port_juve_production %>%
+        left_join(ship_imo_tbl, by = c("ships" = "lrnoimoshipno")) %>%
+        group_by(ports) %>%
+        mutate(wsa_scale = port_area / sum(effective_wsa, port_area,
+          na.rm = TRUE),
+        frac_transferred = rbinom(1, size = 1000, prob = 0.04) / 1000)
 
     # The number of new juveniles is the available pool scaled by relative
     # surface area and the probability of setting rounded up to the nearest
     # whole number.
 
-     port_juvenile_production_size <- port_port_juvenile_proportion %>%
-       mutate(juvenile = ceiling(wsa_scale * frac_transferred * cyprid_emigr))
+      port_juvenile_production_size <- port_port_juvenile_proportion %>%
+        mutate(juvenile = ceiling(wsa_scale * frac_transferred * cyprid_emigr))
 
     # Reshape into a matrix
-     port_juvenile_size_subset <- port_juvenile_production_size %>%
-       ungroup() %>%
-       select(ports, juvenile) %>%
-       melt(value.name = "pop", id.vars = "ports") %>%
-       acast(variable ~ ports, value.var = "pop",
-         fun.aggregate = function(x) mean(x, na.rm = TRUE), drop = TRUE)
-    }
+      port_juvenile_size_subset <- port_juvenile_production_size %>%
+        ungroup() %>%
+        select(ports, juvenile) %>%
+        melt(value.name = "pop", id.vars = "ports") %>%
+        acast(variable ~ ports, value.var = "pop",
+          fun.aggregate = function(x) mean(x, na.rm = TRUE), drop = TRUE)
+      }
   }
 
   if (x == 1) {
@@ -370,17 +404,17 @@ ships_underway_larval_reduction_fn <- function(ships_pop_input, x,
 # Pre-allocate arrays for port and ship emigration and immigration
 
 
-port_cyprid_compentency <- array(0, dim = dim(ports_pop),
+port_cyprid_compentency <- array(0L, dim = dim(ports_pop),
   dimnames = dimnames(ports_pop))
-port_immigration <- array(0, dim = dim(ports_pop),
+port_immigration <- array(0L, dim = dim(ports_pop),
   dimnames = dimnames(ports_pop))
-ship_emigration <- array(0, dim = dim(ships_pop),
+ship_emigration <- array(0L, dim = dim(ships_pop),
   dimnames = dimnames(ships_pop))
-ship_immigration <- array(0, dim = dim(ships_pop),
+ship_immigration <- array(0L, dim = dim(ships_pop),
   dimnames = dimnames(ships_pop))
 
 
-## MAIN MODEL BEGINS ##
+# MAIN MODEL BEGINS #-----------------------------------------------------------
 main_model_fn <- function(ship_imo_tbl, param_grid, A_mat, ports_pop, ...) {
 
   port_area <- param_grid[["port_area"]]
@@ -664,8 +698,6 @@ for (t_global in seq_along(date_list_ext)) {
       chunk_2 <- readRDS(file.path(root_dir(), "data", scenario,
         sprintf("position_array_chunk%0.3d%s", chunk_load2, ".rds")))
 
-
-      # THIS IS WHERE IT IS CRASHING
       if (t_chunk == 1) {
         ship_position <- array(data = as.logical(NA),
           dim = c(dim(chunk_1)[[1]], dim(chunk_1)[[2]],
@@ -738,6 +770,7 @@ for (t_global in seq_along(date_list_ext)) {
       port_lifehistory_input = port_lifehistory_status)
 
      # Ship emigration
+     # REACHES MEMORY LIMIT HERE
     ship_emigration <- ship_emigration_fn(ships_pop, ships_invasion_prob,
       lifestage_vec = ship_to_port_lifestages, x = t_global,
       ship_emigration_input = ship_emigration)
@@ -746,7 +779,7 @@ for (t_global in seq_along(date_list_ext)) {
     port_immigration <- port_immigration_fn(ports_pop, ship_to_port_lifestages,
       ship_emigration, ship_position, t1_position_idx,
       port_immigration_input = port_immigration, x = t_global,
-      ports_instant_mortality)
+      ports_instant_mortality, ports_habitat_suitability)
 
     port_juvenile_production <- port_juvenile_production_fn(ports_pop,
       port_to_ship_lifestages, port_cyprid_compentency, ship_position,
@@ -755,8 +788,7 @@ for (t_global in seq_along(date_list_ext)) {
     # Ship immigration
     ship_immigration <- ship_immigration_fn(ships_pop, port_to_ship_lifestages,
       port_cyprid_compentency, ship_position, t1_position_idx,
-      ship_immigration_input = ship_immigration, x = t_global,
-      ships_instant_mortality)
+      ship_immigration_input = ship_immigration, x = t_global)
 
     # Calculate population change in ports (ports_pop[date, lifestage, port])
     if (t_global > 1) {
@@ -768,7 +800,7 @@ for (t_global in seq_along(date_list_ext)) {
         list(dimnames(ports_pop)[[2]], dimnames(ports_pop)[[3]])
 
    # Add in juvenile recruitment to ports separately from matrix population
-    # growth
+   # growth
 
       if (length(port_juvenile_production) > 0 &
         !is.null(port_juvenile_production)) {
@@ -791,11 +823,11 @@ for (t_global in seq_along(date_list_ext)) {
 
       # Prevent 'negative' populations by setting a lower limit of 0.
       temp_ports_pop <- pmax(ceiling(N_ports * ports_logit_factor +
-                  port_immigration[(t_global - 1), , ]), 0)
+                  port_immigration[(t_global - 1), , ]), 0, na.rm = TRUE)
 
       # Adjust for error where population persists when only 2 individuals are
       # left
-      temp_ports_pop[, temp_ports_pop[, ] <= 2] <- 0
+      temp_ports_pop[temp_ports_pop[] <= 2] <- 0
 
       stopifnot(!is.null(dimnames(temp_ports_pop)[[2]]))
 
@@ -804,9 +836,9 @@ for (t_global in seq_along(date_list_ext)) {
       temp_ports_pop <- ports_pop[t_global, , ]
     }
 
-    # Model assertion check to make sure juveniles don't appear before cyprids
+    ports_pop_idx <-  cube_match_fn(t_date_global, ports_pop, temp_ports_pop)
 
-    afill(ports_pop, t_date_global, , , local = TRUE) <- temp_ports_pop
+    cube_fill_row(ports_pop, temp_ports_pop, ports_pop_idx)
 
     ports_trace_pop <-
       apply(temp_ports_pop[, dimnames(temp_ports_pop)[[2]] %nin% seed_ports], 1,
@@ -818,7 +850,7 @@ for (t_global in seq_along(date_list_ext)) {
       capture = FALSE)
 
     ports_trace_n <- apply(temp_ports_pop[, dimnames(temp_ports_pop)[[2]] %nin%
-      seed_ports], 1, function(x) sum(x > 0))
+      seed_ports], 1, function(x) sum(x > 0L))
 
     flog.trace("parameter%s port_number %i %f %f %f %f", sprintf("%.03d",
       param_iter), t_global, ports_trace_n[1], ports_trace_n[2],
@@ -833,7 +865,6 @@ for (t_global in seq_along(date_list_ext)) {
     flog.trace("parameter%s port_mortality %i %f", sprintf("%.03d", param_iter),
       t_global, ports_instant_mortality_sum,
       name = "ports_instant_mortality_trace", capture = FALSE)
-
 
     # Calculate population change on ships
     # (ships_pop_array[date, lifestage, ship])
@@ -852,17 +883,21 @@ for (t_global in seq_along(date_list_ext)) {
 
       temp_ships_pop <- pmax(ceiling(N_ships * ships_logit_factor -
         ship_emigration[(t_global - 1), , ] +
-        ship_immigration[(t_global - 1), , ]), 0)
+        ship_immigration[(t_global - 1), , ]), 0, na.rm = TRUE)
 
     } else {
       # In the first time slice, so no t-1 time position
-      temp_ships_pop <- ships_pop[t_global,, ]
+      temp_ships_pop <- ships_pop[t_global, , ]
     }
 
-    afill(ships_pop, t_date_global, , , local = TRUE) <- temp_ships_pop
+    ships_pop_idx <-  cube_match_fn(t_date_global, ships_pop, temp_ships_pop)
+
+    cube_fill_row(ships_pop, temp_ships_pop, ships_pop_idx)
 
     temp_ships_pop[temp_ships_pop == 0] <- NA
-    ships_trace_pop <- apply(temp_ships_pop, 1, max, na.rm = TRUE)
+
+    ships_trace_pop <- apply(temp_ships_pop, 1,
+      function(x) max(x, na.rm = TRUE))
 
     flog.trace("parameter%s ships_population %i %f %f %f %f", sprintf("%.03d",
       param_iter), t_global, ships_trace_pop[1], ships_trace_pop[2],
@@ -930,8 +965,5 @@ saveRDS(ship_immigration, file = paste0(results_dir, "/", "ship_immigration_",
 saveRDS(ports_instant_mortality, file = paste0(results_dir, "/",
   "ports_instant_mortality_", Sys.Date(), ".RData"))
 flog.info("ports_instant_mortality saved", name = "model_progress.log")
-saveRDS(ships_instant_mortality, file = paste0(results_dir, "/",
-  "ships_instant_mortality_", Sys.Date(), ".RData"))
-flog.info("ships_instant_mortality saved", name = "model_progress.log")
 
 }  # End of main_model_fn statement

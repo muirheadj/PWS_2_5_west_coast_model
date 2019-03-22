@@ -68,7 +68,7 @@ table <- function(..., useNA = "always") base::table(..., useNA = useNA)
 # Set up tracer and info loggers
 
 log_name <- function(x) paste0("parameter",
-  sprintf("%03d", as.numeric(params[1])), "_", x)
+  sprintf("%03d", as.numeric(param_iter[1])), "_", x)
 
 flog.logger(name = "ports_pop_trace", TRACE,
   appender = appender.tee(log_name("ports_pop_trace.log")))
@@ -83,7 +83,7 @@ flog.logger(name = "ships_pop_trace", TRACE,
 flog.logger(name = "ports_instant_mortality_trace", TRACE,
   appender = appender.tee(log_name("ports_instant_mortality_trace.log")))
 
-flog.threshold(WARN, name = "ports_pop_trace")
+flog.threshold(TRACE, name = "ports_pop_trace")
 flog.threshold(WARN, name = "ports_n_trace")
 flog.threshold(WARN, name = "juve_lag")
 flog.threshold(WARN, name = "ships_pop_trace")
@@ -196,7 +196,7 @@ ships_pop_temp <- readRDS(file.path(data_directory, "ships_array.rds"))
 ports_pop_temp <- readRDS(file.path(data_directory, "ports_array.rds"))
 
 
-ships_instant_mortality <- ships_pop_temp
+#ships_instant_mortality <- ships_pop_temp
 ports_instant_mortality <- ports_pop_temp
 
 # Make sure the ports_pop_temp matrix names are in the right order
@@ -254,19 +254,23 @@ sourceCpp(file.path(root_dir(), "src", "popgrow.cpp"), verbose = FALSE)
 # Source c++ version of stochastic matrix
 sourceCpp(file.path(root_dir(), "src", "stoch_pop_growth.cpp"), verbose = FALSE)
 
+
   # Add a dimension for the number of life stages in the population
 ships_pop <- ships_array_add(ships_pop_temp,
   lifestages = ship_to_port_lifestages)
 ports_pop_temp <- ports_array_add(ports_pop_temp,
   lifestages = ship_to_port_lifestages)
 ports_pop <- seed_ports_fn(param = parameter_grid[param_iter, ],
-  seed_names = seed_port_names, ports_pop_temp, lifestages = ship_to_port_lifestages)
+  seed_names = seed_port_names, ports_pop_temp, 
+  lifestages = ship_to_port_lifestages)
 
 source(file.path(root_dir(), "src", "02-main_model.R"))
 
 # Run main model
 
-debug(main_model_fn)
+sourceCpp(file.path(root_dir(), "src", "arma_cube.cpp"), verbose = TRUE,
+          rebuild = TRUE)
+
 
 model_run <- main_model_fn(ship_imo_tbl, param = parameter_grid[param_iter, ],
 	pop_transition, ports_pop, root_dir(), data_directory, param_iter, boot_iter,
