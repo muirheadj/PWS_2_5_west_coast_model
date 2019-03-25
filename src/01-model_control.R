@@ -90,7 +90,7 @@ flog.threshold(TRACE, name = "ports_n_trace")
 flog.threshold(TRACE, name = "juve_lag")
 flog.threshold(TRACE, name = "ships_emigration_trace")
 flog.threshold(TRACE, name = "ships_pop_trace")
-flog.threshold(TRACE, name = "ports_instant_mortality_trace")
+flog.threshold(INFO, name = "ports_instant_mortality_trace")
 
 # Identify species
 sp_name <- yaml_params[["params"]][["sp_name"]]

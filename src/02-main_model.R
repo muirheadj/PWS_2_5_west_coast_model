@@ -96,13 +96,17 @@ port_cyprid_compentency_fn <- function(ports_array = ports_array,
 
     p_emigration_mat <- ceiling(outer(lifestage_vec,
                 p_emigration_competent_proportion) *
-        ports_array[(x - 1),,, drop = TRUE])
+        ports_array[(x - 1), , , drop = TRUE])
 
     dimnames(p_emigration_mat) <- list(dimnames(ports_array)[[2]],
       dimnames(ports_array)[[3]])
 
-    afill(port_emigration_input, t1_date_global,,, local = TRUE) <-
-      p_emigration_mat
+    ports_emmigration_idx <- cube_match_fn(t1_date_global,
+      A = port_emigration_input, y = p_emigration_mat)
+
+    fill_cube_dbl(port_emigration_input, p_emigration_mat,
+      ports_emmigration_idx)
+
 
   }
   port_emigration_input
@@ -157,8 +161,6 @@ port_immigration_fn <- function(ports_array = ports_array,
       max = 1)
 
   # Add in environmental matching for each port
-    names(ports_habitat_suitability) %in% colnames(port_immigration_total)
-
     ports_habitat_suitability_sub <-
       ports_habitat_suitability[names(ports_habitat_suitability) %in%
         colnames(port_immigration_total)]
@@ -377,9 +379,9 @@ fw_reduction_fn <- function(ships_pop_input, x, ship_position,
     names(ship_position_panama_canal[!is.na(ship_position_panama_canal)])
 
   if (!is.null(ship_names_pc)) {
-    ships_pop_input[(x - 1),,
+    ships_pop_input[(x - 1), ,
       dimnames(ships_pop_input)[[3]] %in% ship_names_pc] <-
-      fw * ships_pop_input[(x - 1),,
+      fw * ships_pop_input[(x - 1), ,
       dimnames(ships_pop_input)[[3]] %in% ship_names_pc]
     }
   ships_pop_input
@@ -388,7 +390,7 @@ fw_reduction_fn <- function(ships_pop_input, x, ship_position,
 
 ships_underway_larval_reduction_fn <- function(ships_pop_input, x,
   ship_position, t1 = t1_position_idx){
-  # Get names of ships that are in the Panama Canal at time t-1
+  # Get names of ships that are on the move at time t-1
   position_underway <- ship_position[,, t1, drop = TRUE]
   ship_names_underway <- names(position_underway[is.na(position_underway)])
 
@@ -402,14 +404,14 @@ ships_underway_larval_reduction_fn <- function(ships_pop_input, x,
 
 # Pre-allocate arrays for port and ship emigration and immigration
 
-port_cyprid_compentency <- array(0L, dim = dim(ports_pop),
+port_cyprid_compentency <- array(0, dim = dim(ports_pop),
   dimnames = dimnames(ports_pop))
-port_immigration <- array(0L, dim = dim(ports_pop),
+port_immigration <- array(0, dim = dim(ports_pop),
   dimnames = dimnames(ports_pop))
 ship_emigration <- array(0L, dim = dim(ships_pop),
   dimnames = dimnames(ships_pop))
 ship_immigration <- array(0L, dim = dim(ships_pop),
-	dimnames = dimnames(ships_pop))
+  dimnames = dimnames(ships_pop))
 
 # MAIN MODEL BEGINS #-----------------------------------------------------------
 main_model_fn <- function(ship_imo_tbl, param_grid, A_mat, ports_pop, ...) {
@@ -823,8 +825,8 @@ for (t_global in seq_along(date_list_ext)) {
       # left
       temp_ports_pop[temp_ports_pop < 2] <- 0
 
- 					# Round up to nearest integer
- 					temp_ports_pop <- ceiling(temp_ports_pop)
+          # Round up to nearest integer
+          temp_ports_pop <- ceiling(temp_ports_pop)
       stopifnot(!is.null(dimnames(temp_ports_pop)[[2]]))
 
     } else {
@@ -877,16 +879,27 @@ for (t_global in seq_along(date_list_ext)) {
       ships_logit_factor[which(dimnames(ships_logit_factor)[[1]] %in%
         c("larva", "cyprid")), ] <- 1
 
-						# Convert to integer
+            # Convert to integer
       temp_ships_pop <- N_ships * ships_logit_factor -
         ship_emigration[(t_global - 1), , ] +
         ship_immigration[(t_global - 1), , ]
 
-      # Sanity check for negative population size
+      ships_emigration_trace <- matrixStats::rowMeans2(
+        ship_emigration[(t_global - 1), , ])
 
-      temp_ships_pop[temp_ships_pop < 0] <- 0
+      names(ships_emigration_trace) <- dimnames(ships_pop)[[2]]
 
-      # Round up and convert to integer
+      flog.trace("parameter%s ships_emigration %i %f %f %f %f",
+        sprintf("%.03d", param_iter), t_global, ships_emigration_trace[1],
+          ships_emigration_trace[2], ships_emigration_trace[3],
+          ships_emigration_trace[4], name = "ships_emigration_trace",
+      capture = FALSE)
+
+      # Sanity check for negative or small population size
+
+      temp_ships_pop[temp_ships_pop < 2] <- 0
+
+      # Round up and convert to integers
       temp_ships_pop <- ceiling(temp_ships_pop)
 
     } else {
@@ -919,8 +932,7 @@ for (t_global in seq_along(date_list_ext)) {
 
   # Create directories to store results
   parameter_dir <- sprintf("parameter%.03d", param_iter)
-  boot_dir <- paste0("bootstrap_iter", sprintf("%0.3d", boot_iter), "/")
-  results_dir <- paste0(basedir, "results/", boot_dir, parameter_dir)
+  results_dir <- file.path(root_dir(), "results", parameter_dir)
 
   alphabet_it <- iterators::iter(letters[1:26])
 
