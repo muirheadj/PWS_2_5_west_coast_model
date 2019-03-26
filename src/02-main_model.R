@@ -36,6 +36,23 @@ cube_match_fn <- function(global_date, A, y) {
   c_idx
 }
 
+# This function matches the names of an matrix and and a matrix with
+# a single row. Indices are 0-based for use with c++.
+matrix_match_fn <- function(A, y, default_rowname = "juvenile") {
+		if (is.vector(y)) {
+			 idx_match1 <- match(default_rowname, dimnames(A)[[1]])
+    idx_match2 <- match(names(y), dimnames(A)[[2]])
+		}
+		
+		if (is.matrix(y)) {
+			 idx_match1 <- match(rownames(y), dimnames(A)[[1]])
+			 idx_match2 <- match(colnames(y), dimnames(A)[[2]])
+		}
+		
+  c_idx <- as.matrix(expand.grid(idx_match1, idx_match2) - 1)
+  c_idx
+}
+
 # Enter all the parameters necessary for each of the sub functions in
 # ship_port_prob
 ship_port_prob_fn <- function(x, max_rate, rate) {
@@ -301,11 +318,18 @@ ship_immigration_fn <- function(ships_pop,
 }
 
 # Port cyprid settlement
+
+# FIXME!!!!!!!!!!!!!!!!!!!!!!
+
 port_juvenile_production_fn <- function(ports_pop,
   lifestage_vec = port_to_ship_lifestages,
   port_emigration = port_cyprid_compentency, ship_position,
-  t1 = t1_position_idx, x = t_global){
-
+  t1 = t1_position_idx, x = t_global) {
+  
+  port_juvenile_size_subset <- rep(0, length = dim(port_emigration)[[3]])
+    names(port_juvenile_size_subset) <- dimnames(port_emigration)[[3]]
+    
+  
   if (x > 1) {
     t1_global <- x - 1
 
@@ -314,7 +338,11 @@ port_juvenile_production_fn <- function(ports_pop,
 
     ship_names <-
       ship_and_port_names_from_ship_position(ship_position, t1)[["ship_names"]]
-
+      
+    if (length(port_names) == 0 & length(ship_names) == 0) {
+      return(port_juvenile_size_subset)
+    }
+    
     # Get port emigration at time t-1
     port_emigration_temp <- data.frame(t(port_emigration[t1_global,, ] *
       lifestage_vec), stringsAsFactors = FALSE)
@@ -349,20 +377,21 @@ port_juvenile_production_fn <- function(ports_pop,
       port_juvenile_production_size <- port_port_juvenile_proportion %>%
         mutate(juvenile = ceiling(wsa_scale * frac_transferred * cyprid_emigr))
 
-    # Reshape into a matrix
+    # Reshape into a vector
       port_juvenile_size_subset <- port_juvenile_production_size %>%
         ungroup() %>%
         select(ports, juvenile) %>%
         melt(value.name = "pop", id.vars = "ports") %>%
         acast(variable ~ ports, value.var = "pop",
           fun.aggregate = function(x) mean(x, na.rm = TRUE), drop = TRUE)
+          
+      port_juvenile_size_subset <- as.vector(port_juvenile_size_subset)
+      names(port_juvenile_size_subset) <- dimnames(port_emigration)[[3]]
+     
       }
   }
-
-  if (x == 1) {
-    port_juvenile_size_subset <- rep(0, length = dim(port_emigration)[[3]])
-    names(port_juvenile_size_subset) <- dimnames(port_emigration)[[3]]
-  }
+		stopifnot(is.vector(port_juvenile_size_subset))
+		
   port_juvenile_size_subset
 }
 
@@ -492,8 +521,8 @@ main_model_fn <- function(ship_imo_tbl, param_grid, A_mat, ports_pop, ...) {
     res
   }
 
-for (t_global in seq_along(date_list_ext)) {
-
+#for (t_global in seq_along(date_list_ext)) {
+for (t_global in c(1, 2, 13101, 13102, 13103)) {
   # Get the time slice position in the chunk as well as the name in the chunk
   # Current date
 
@@ -697,7 +726,7 @@ for (t_global in seq_along(date_list_ext)) {
         sprintf("position_array_chunk%0.3d%s", chunk_load2, ".rds")))
 
       if (t_chunk == 1) {
-        ship_position <- array(data = as.logical(NA),
+        ship_position <- array(data = NA,
           dim = c(dim(chunk_1)[[1]], dim(chunk_1)[[2]],
             dim(chunk_1)[[3]] + dim(chunk_2)[[3]]),
           dimnames = list(dimnames(chunk_1)[[1]],
@@ -803,14 +832,24 @@ for (t_global in seq_along(date_list_ext)) {
         !is.null(port_juvenile_production)) {
 
       # Check for port name matches. Change ports_pop to N_ports
+    
       ports_pop_juve <-
         N_ports[which(dimnames(N_ports)[[1]] == "juvenile"),
         match(dimnames(N_ports)[[2]],
-          dimnames(port_juvenile_production)[[2]])] + port_juvenile_production
+          names(port_juvenile_production))] + port_juvenile_production
 
-        afill(N_ports, local = TRUE) <- ports_pop_juve
-      }
-
+								N_ports_idx <- matrix_match_fn(N_ports, ports_pop_juve,
+								  default_rowname = "juvenile")
+								  
+								if (is.vector(ports_pop_juve)) {
+								  fill_mat_vec_dbl(N_ports, ports_pop_juve, N_ports_idx)
+								}
+								
+								if (is.matrix(ports_pop_juve)) {
+								  fill_mat_mat_dbl(N_ports, ports_pop_juve, N_ports_idx)
+        }
+					}
+					
       # Apply carrying capacity upper limit
       ports_logit_factor <- (k_ports - N_ports) / k_ports
 

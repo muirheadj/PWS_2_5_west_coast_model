@@ -4,7 +4,7 @@
 #
 # Author: jmuirhead
 ###############################################################################
-
+options(error=function()traceback(2))
 
 # Pass parameters to model based on arguments supplied to Rscript
 param_iter <- 1
@@ -272,7 +272,6 @@ source(file.path(root_dir(), "src", "02-main_model.R"))
 # Run main model ---------------------------------------------------------------
 
 sourceCpp(file.path(root_dir(), "src", "arma_cube.cpp"), verbose = FALSE)
-
 
 model_run <- main_model_fn(ship_imo_tbl, param = parameter_grid[param_iter, ],
 	pop_transition, ports_pop, root_dir(), data_directory, param_iter, boot_iter,
