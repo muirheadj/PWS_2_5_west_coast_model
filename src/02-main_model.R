@@ -135,7 +135,7 @@ port_immigration_fn <- function(ports_array = ports_array,
   ship_emigration = ship_emigration, ship_position = ship_position,
   t1 = t1_position_idx,
   port_immigration_input = port_immigration, x = t_global,
-  ports_instant_mortality, ports_habitat_suitability) {
+  ports_instant_mortality, ports_habitat_suitability, habitat_threshold) {
 
   # Make sure to use ship position from t_global - 1
   if (x > 1) {
@@ -182,7 +182,7 @@ port_immigration_fn <- function(ports_array = ports_array,
       ports_habitat_suitability[names(ports_habitat_suitability) %in%
         colnames(port_immigration_total)]
 
-    port_immigration_total[1, ] <- ports_habitat_suitability_sub *
+    port_immigration_total[1, ] <- (0 + (ports_habitat_suitability_sub >= habitat_threshold)) *
        port_immigration_total[1, ]
 
   # Keep track of instant mortality for ports
@@ -319,8 +319,6 @@ ship_immigration_fn <- function(ships_pop,
 
 # Port cyprid settlement
 
-# FIXME!!!!!!!!!!!!!!!!!!!!!!
-
 port_juvenile_production_fn <- function(ports_pop,
   lifestage_vec = port_to_ship_lifestages,
   port_emigration = port_cyprid_compentency, ship_position,
@@ -444,7 +442,7 @@ ship_immigration <- array(0L, dim = dim(ships_pop),
 
 # MAIN MODEL BEGINS #-----------------------------------------------------------
 main_model_fn <- function(ship_imo_tbl, param_grid, A_mat, ports_pop, ...) {
-
+		habitat_threshold <- param_grid[["habitat_threshold"]]
   port_area <- param_grid[["port_area"]]
   k_ports <- param_grid[["k_ports"]]
   max_density_individuals <- param_grid[["max_density_individuals"]]

@@ -9,7 +9,10 @@ params:
    - seed_ports2
   sp_name: 
    - hypothetical_sp
-   - A_improvisus
+   - bal_improvisus
+  habitat_threshold:
+    - hypothetical_sp: 0.0
+    - bal_improvisus: 0.1846
   port_area: 1.0e+07
   max_density_individuals: 5.0e+3
   fw_reduction: 0.0

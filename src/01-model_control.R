@@ -145,6 +145,12 @@ parameter_grid <- expand.grid(
   port_compentency_prob = yaml_params[["params"]][["port_comptency_prob"]],
   stringsAsFactors = FALSE)
 
+habitat_threshold <-  unlist(yaml_params[["params"]][["habitat_threshold"]],
+		recursive = FALSE) %>% as_tibble() %>%
+		tidyr::gather(key = "species", value = "habitat_threshold")
+		
+parameter_grid <- left_join(parameter_grid, habitat_threshold, by = "species")
+
 parameter_grid <- parameter_grid %>%
   filter(!(species == "hypothetical_sp" & seed_ports == "seed_ports2"))
 
