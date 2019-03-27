@@ -24,7 +24,6 @@ results_dir <- find_root_file("results", criterion = root_crit)
 figures_dir <- find_root_file("figures", criterion = root_crit)
 data_dir <- find_root_file("data", criterion = root_crit)
 
-
 process_ports_data <- FALSE
 process_ships_data <- FALSE
 

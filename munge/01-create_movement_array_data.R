@@ -64,64 +64,76 @@ ports_con <-
 # Read in from CSV file
 
 # CHECK ON THIS
-arrivals_qry <- 'SELECT
-    NBIC_Vessel AS imo_no,
-    Type AS nbic_shiptype,
-    Sub_Type AS sub_type,
-    Transit_Type AS transit_type,
-    Arrival_Port AS arrival_port,
-    Arrival_Bioregion AS arrival_bioregion,
-    Arrival_Lon AS arrival_lon,
-    Arrival_Lat AS arrival_lat,
-    Arrival_date AS arrival_date,
-    Departure_date AS departure_date,
-    Last_Port AS last_port,
-    Last_Lon AS last_lon,
-    Last_Lat AS last_lat,
-    Last_Bioregion AS last_bioregion
-FROM
-    NVMCws_Arrivals
-WHERE
-		Arrival_Lat IS NOT NULL AND Arrival_Lon IS NOT NULL AND
-    (Arrival_date IS NOT NULL AND Departure_date IS NOT NULL) AND
-    Status = "reviewed" AND
-    Arrival_Coast IN ("ca_west", "West", "Alaska") AND
-    Arrival_date BETWEEN DATE("2010-01-01") AND DATE("2017-12-31")'
+arrivals_qry <- "SELECT
+        NBIC_Vessel AS imo_no,
+            Type AS nbic_shiptype,
+            Sub_Type AS sub_type,
+            Transit_Type AS transit_type,
+            Arrival_Port AS arrival_port,
+            Arrival_Bioregion AS arrival_bioregion,
+            Arrival_Coast AS arrival_coast,
+            Arrival_Lon AS arrival_lon,
+            Arrival_Lat AS arrival_lat,
+            Arrival_date AS arrival_date,
+            Departure_date AS departure_date,
+            Last_Port AS last_port,
+            Last_Lon AS last_lon,
+            Last_Lat AS last_lat,
+            Last_Bioregion AS last_bioregion,
+            Last_Coast AS last_coast
+    FROM
+        NVMCws_Arrivals
+    WHERE
+        NBIC_Vessel IS NOT NULL
+            AND Arrival_Lat IS NOT NULL
+            AND Arrival_Lon IS NOT NULL
+            AND (Arrival_date IS NOT NULL
+            AND Departure_date IS NOT NULL)
+            AND Status = 'reviewed'
+            AND Arrival_Coast IN ('ca_west', 'West', 'Alaska')
+            AND Arrival_date BETWEEN DATE('2010-01-01') AND DATE('2017-12-31')
+    ORDER BY NBIC_Vessel, Arrival_Date"
 
 arrivals_full <- tbl(ports_con, sql(arrivals_qry)) %>%
   collect(n = Inf)
 
-
 # Check for ship movement
 
 coastwise_ships <- arrivals_full %>%
-	filter(!is.na(imo_no)) %>%
 	group_by(imo_no) %>%
-	summarise(transit_status = ifelse(all(transit_type == "Coastwise"),
-	  "coastwise_only", ifelse(all(transit_type == "Overseas"), "overseas_only",
-	  "both")))
-
-coastwise_summary <- coastwise_ships %>%
-		group_by(transit_status) %>%
-		tally()
-
+	summarise(transit_status = ifelse(all(transit_type == "Overseas"), "overseas_only",
+	  "both")) %>%
+  filter(transit_status == "both")
 
 # Just use the columns on arrivals data. Last port information is required
 # if the last port was on the West Coast, including Canada or Alaska.
 
 arrivals_only <- arrivals_full %>%
-  select(-last_port, -last_lon, -last_lat, -last_bioregion)
+  select(-last_port, -last_lon, -last_lat, -last_bioregion, -last_coast)
 
 arrival_ports <- arrivals_full %>%
   select(port = arrival_port, lon = arrival_lon, lat = arrival_lat,
-  bioregion = arrival_bioregion) %>%
+  bioregion = arrival_bioregion, coast = arrival_coast) %>%
+  unique()
+
+coastwise_arrival_ports <- arrivals_full %>%
+  semi_join(coastwise_ships, by = "imo_no") %>%
+  select(-last_port, -last_lon, -last_lat, -last_bioregion, -last_coast) %>%
+  select(port = arrival_port, lon = arrival_lon, lat = arrival_lat,
+         bioregion = arrival_bioregion, coast =  arrival_coast) %>%
   unique()
 
 # NOTE: Also includes overseas last ports, temporarily
 
 previous_ports <- arrivals_full %>%
   select(port = last_port, lon = last_lon, lat = last_lat,
-  bioregion = last_bioregion) %>%
+  bioregion = last_bioregion, coast = last_coast) %>%
+  unique()
+
+coastwise_previous_ports <- arrivals_full %>%
+  semi_join(coastwise_ships, by = "imo_no") %>%
+  select(port = last_port, lon = last_lon, lat = last_lat,
+         bioregion = last_bioregion, coast = last_coast) %>%
   unique()
 
 # Port data includes last ports that are not on the West Coast or Alaska,
@@ -129,11 +141,20 @@ previous_ports <- arrivals_full %>%
 
 port_data <- bind_rows(arrival_ports, previous_ports) %>%
   unique() %>%
-  filter((!is.na(lat) | !is.na(lon)),
-    bioregion %in% c("NA-S1", "NEP-I", "NEP-II", "NEP-III", "NEP-IV",
-      "NEP-V", "NEP-VI")) %>%
+  filter(!is.na(lat) | !is.na(lon), !is.na(bioregion),
+         (coast %in% c("Alaska", "ca-west", "West") | bioregion == "NA-S1")) %>%
   arrange(port)
 
+
+coastwise_port_data <-
+  bind_rows(coastwise_arrival_ports, coastwise_previous_ports) %>%
+  unique() %>%
+  filter(!is.na(lat) | !is.na(lon), !is.na(bioregion),
+         (coast %in% c("Alaska", "ca-west", "West") | bioregion == "NA-S1")) %>%
+  arrange(port)
+
+port_data %>%
+  anti_join(coastwise_port_data)
 
 # Read in raster data, and create a new column for every species if
 # the value is above the threshold for habitat suitability
@@ -161,7 +182,8 @@ arrivals_only[, datetype_grep] <- lapply(arrivals_only[, datetype_grep],
 
 # Filter out blacklisted ship types, ports, etc.
 ship_raw_tbl <- arrivals_only %>%
-  filter(nbic_shiptype %nin% ships_blacklist, sub_type %nin% ships_blacklist) %>%
+  filter(nbic_shiptype %nin% ships_blacklist,
+    sub_type %nin% ships_blacklist) %>%
   arrange(imo_no, arrival_date)
 
 
@@ -255,23 +277,22 @@ ship_raw_tbl <-
 
 # Filter out bad ships than are drive-bys (must spend at least 1/2 hour in ports)
 ship_movement_raw_tbl <- ship_raw_tbl %>%
-    select(port = arrival_port,
-      reg_lrggeo = arrival_bioregion,
-      latitude = arrival_lat,
-      longitude = arrival_lon,
-      lrnoimoshipno = imo_no,
-      nbic_shiptype,
-      sub_type,
-      arrival_date,
-      departure_date,
-      wsa,
-      gt,
-      nrt,
-      depth,
-      draft,
-      loa,
-      dwt
-    )
+  select(port = arrival_port,
+    reg_lrggeo = arrival_bioregion,
+    latitude = arrival_lat,
+    longitude = arrival_lon,
+    lrnoimoshipno = imo_no,
+    nbic_shiptype,
+    sub_type,
+    arrival_date,
+    departure_date,
+    wsa,
+    gt,
+    nrt,
+    depth,
+    draft,
+    loa,
+    dwt)
 
 # End of ship movement ## ------------------------------------------------------
 

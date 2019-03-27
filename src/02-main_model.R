@@ -48,7 +48,6 @@ matrix_match_fn <- function(A, y, default_rowname = "juvenile") {
        idx_match1 <- match(rownames(y), dimnames(A)[[1]])
        idx_match2 <- match(colnames(y), dimnames(A)[[2]])
     }
-  
   c_idx <- as.matrix(expand.grid(idx_match1, idx_match2) - 1)
   c_idx
 }
@@ -182,8 +181,9 @@ port_immigration_fn <- function(ports_array = ports_array,
       ports_habitat_suitability[names(ports_habitat_suitability) %in%
         colnames(port_immigration_total)]
 
-    port_immigration_total[1, ] <- (0 + (ports_habitat_suitability_sub >= habitat_threshold)) *
-       port_immigration_total[1, ]
+    port_immigration_total[1, ] <-
+      (0 + (ports_habitat_suitability_sub >= habitat_threshold)) *
+         port_immigration_total[1, ]
 
   # Keep track of instant mortality for ports
 
@@ -324,7 +324,7 @@ port_juvenile_production_fn <- function(ports_pop,
   port_emigration = port_cyprid_compentency, ship_position,
   t1 = t1_position_idx, x = t_global) {
 
-  port_juvenile_size_subset <- rep(0, length = dim(port_emigration)[[3]])
+  port_juvenile_size_subset <- rep(0.0, length = dim(port_emigration)[[3]])
     names(port_juvenile_size_subset) <- dimnames(port_emigration)[[3]]
 
   if (x > 1) {
@@ -386,10 +386,8 @@ port_juvenile_production_fn <- function(ports_pop,
       names(port_juvenile_size_subset) <- dimnames(port_emigration)[[3]]
       }
   }
-    stopifnot(is.vector(port_juvenile_size_subset))
   port_juvenile_size_subset
 }
-
 
 # Freshwater dip reduction function
 fw_reduction_fn <- function(ships_pop_input, x, ship_position,
@@ -410,7 +408,6 @@ fw_reduction_fn <- function(ships_pop_input, x, ship_position,
     }
   ships_pop_input
 }
-
 
 ships_underway_larval_reduction_fn <- function(ships_pop_input, x,
   ship_position, t1 = t1_position_idx){
@@ -467,7 +464,7 @@ main_model_fn <- function(ship_imo_tbl, param_grid, A_mat, ports_pop, ...) {
   date_list_ext <- dimnames(ships_pop)[[1]]
   date_list_ext_chunks <- chunkr(date_list_ext, chunk_size = chunk_size)
 
-# Array to store ship specific probability of infecting ports
+  # Array to store ship specific probability of infecting ports
   ship_imo_tbl[["wsa_prob"]] <- ship_port_prob
   ships_invasion_prob <- ship_imo_tbl[["wsa_prob"]]
   names(ships_invasion_prob) <- ship_imo_tbl[["lrnoimoshipno"]]
@@ -481,8 +478,7 @@ main_model_fn <- function(ship_imo_tbl, param_grid, A_mat, ports_pop, ...) {
 
   # Set up a matrix for the carrying capacity for each vessel
   k_ships <- matrix(data = rep(ship_imo_tbl[["k_ships"]],
-          each = length(ship_to_port_lifestages)), nrow = 4)
-
+    each = length(ship_to_port_lifestages)), nrow = 4)
 
   # Generate hybrid indicies to read the ff arrays
   hi_ship <- 1:dim(k_ships)[2]  # Index for ships
@@ -516,73 +512,79 @@ main_model_fn <- function(ship_imo_tbl, param_grid, A_mat, ports_pop, ...) {
     res
   }
 
-for (t_global in seq_along(date_list_ext)) {
-  # Get the time slice position in the chunk as well as the name in the chunk
-  # Current date
+  for (t_global in seq_along(date_list_ext)) {
+    # Get the time slice position in the chunk as well as the name in the chunk
+    # Current date
 
-  current_datetime <- dateseq[t_global]
-  # date as character format for array position matching
-  t_date_global <<- date_list_ext[t_global]
+    current_datetime <- dateseq[t_global]
+    # date as character format for array position matching
+    t_date_global <<- date_list_ext[t_global]
 
 
-  # Add time lags before life-history demographic parameters take effect
-  # If t_global is equal to that date, change value in A_port_stoch for that
-  # port
+    # Add time lags before life-history demographic parameters take effect
+    # If t_global is equal to that date, change value in A_port_stoch for that
+    # port
 
-  t_larva <- current_datetime + larval_dev_lag
-  t_juvenile <- current_datetime + juvenile_lag
-  t_mature <- current_datetime + mature_lag
-  t_reproduce <- current_datetime + repro_lag
+    t_larva <- current_datetime + larval_dev_lag
+    t_juvenile <- current_datetime + juvenile_lag
+    t_mature <- current_datetime + mature_lag
+    t_reproduce <- current_datetime + repro_lag
 
-  # Date at position t_global - 1 # Note the double <<- for Global assignment
+    # Date at position t_global - 1 # Note the double <<- for Global assignment
 
-  t1_date_global <<- ifelse(t_global > 1, date_list_ext[t_global - 1],
-    date_list_ext[t_global])
+    t1_date_global <<- ifelse(t_global > 1, date_list_ext[t_global - 1],
+      date_list_ext[t_global])
 
-  # Current slice
-  t_slice <- find_date_in_chunk_fn(t_date_global, date_list_ext_chunks)
+    # Current slice
+    t_slice <- find_date_in_chunk_fn(t_date_global, date_list_ext_chunks)
 
-  # What chunk of data the slice is in
-  t_chunk <- as.numeric(names(t_slice))
+    # What chunk of data the slice is in
+    t_chunk <- as.numeric(names(t_slice))
 
-  # Find out which ports and ships have been invaded, and return the names
+    # Find out which ports and ships have been invaded, and return the names
 
-  if (t_global == 1) {
+    if (t_global == 1) {
 
-    larval_invaded_port_names <- lifehistory_lag(ports_pop[t_global, 1, ])
-    larval_invaded_ship_names <- lifehistory_lag(ships_pop[t_global, 1, ])
+      larval_invaded_port_names <- lifehistory_lag(ports_pop[t_global, 1, ])
+      larval_invaded_ship_names <- lifehistory_lag(ships_pop[t_global, 1, ])
 
-    juvenile_invaded_port_names <- lifehistory_lag(ports_pop[t_global, 3, ])
-    juvenile_invaded_ship_names <- lifehistory_lag(ships_pop[t_global, 3, ])
+      juvenile_invaded_port_names <- lifehistory_lag(ports_pop[t_global, 3, ])
+      juvenile_invaded_ship_names <- lifehistory_lag(ships_pop[t_global, 3, ])
 
-    mature_invaded_port_names <- lifehistory_lag(ports_pop[t_global, 3, ])
-    mature_invaded_ship_names <- lifehistory_lag(ships_pop[t_global, 3, ])
+      mature_invaded_port_names <- lifehistory_lag(ports_pop[t_global, 3, ])
+      mature_invaded_ship_names <- lifehistory_lag(ships_pop[t_global, 3, ])
 
-    reprod_invaded_port_names <- lifehistory_lag(ports_pop[t_global, 4, ])
-    reprod_invaded_ship_names <- lifehistory_lag(ships_pop[t_global, 4, ])
+      reprod_invaded_port_names <- lifehistory_lag(ports_pop[t_global, 4, ])
+      reprod_invaded_ship_names <- lifehistory_lag(ships_pop[t_global, 4, ])
 
-  } else {
+    } else {
 
-    larval_invaded_port_names <- lifehistory_lag(ports_pop[(t_global - 1), 1, ])
-    # look at just the larvae
+      larval_invaded_port_names <-
+        lifehistory_lag(ports_pop[(t_global - 1), 1, ])
+      # look at just the larvae
 
-    larval_invaded_ship_names <- lifehistory_lag(ships_pop[(t_global - 1), 1, ])
+      larval_invaded_ship_names <- lifehistory_lag(
+        ships_pop[(t_global - 1), 1, ])
 
-    # look at cyprid population
-    juvenile_invaded_port_names <-
-      lifehistory_lag(ports_pop[(t_global - 1), 2, ])
+      # look at cyprid population
+      juvenile_invaded_port_names <-
+        lifehistory_lag(ports_pop[(t_global - 1), 2, ])
 
     # look at juvenile population since cyprids are swept off the ship
     juvenile_invaded_ship_names <-
       lifehistory_lag(ships_pop[(t_global - 1), 3, ])
 
     # look at just the juveniles
-    mature_invaded_port_names <- lifehistory_lag(ports_pop[(t_global - 1), 3, ])
-    mature_invaded_ship_names <- lifehistory_lag(ships_pop[(t_global - 1), 3, ])
+      mature_invaded_port_names <-
+        lifehistory_lag(ports_pop[(t_global - 1), 3, ])
+      mature_invaded_ship_names <-
+        lifehistory_lag(ships_pop[(t_global - 1), 3, ])
 
     # look at just the adults
-    reprod_invaded_port_names <- lifehistory_lag(ports_pop[(t_global - 1), 4, ])
-    reprod_invaded_ship_names <- lifehistory_lag(ships_pop[(t_global - 1), 4, ])
+      reprod_invaded_port_names <-
+        lifehistory_lag(ports_pop[(t_global - 1), 4, ])
+      reprod_invaded_ship_names <-
+        lifehistory_lag(ships_pop[(t_global - 1), 4, ])
     }
 
     # Update development and reproduction schedule
@@ -825,24 +827,21 @@ for (t_global in seq_along(date_list_ext)) {
       if (length(port_juvenile_production) > 0 &
         !is.null(port_juvenile_production)) {
 
-      # Check for port name matches. Change ports_pop to N_ports
-      ports_pop_juve <-
-        N_ports[which(dimnames(N_ports)[[1]] == "juvenile"),
-        match(dimnames(N_ports)[[2]],
-          names(port_juvenile_production))] + port_juvenile_production
+        # Check for port name matches. Change ports_pop to N_ports
+        ports_pop_juve <-
+          N_ports[which(dimnames(N_ports)[[1]] == "juvenile"),
+            match(dimnames(N_ports)[[2]],
+              names(port_juvenile_production))] + port_juvenile_production
 
-                N_ports_idx <- matrix_match_fn(N_ports, ports_pop_juve,
-                  default_rowname = "juvenile")
-           
-                if (is.vector(ports_pop_juve)) {
-                  fill_mat_vec_dbl(N_ports, ports_pop_juve, N_ports_idx)
-                }
-      
-                if (is.matrix(ports_pop_juve)) {
-                  fill_mat_mat_dbl(N_ports, ports_pop_juve, N_ports_idx)
+        N_ports_idx <- matrix_match_fn(N_ports, ports_pop_juve,
+          default_rowname = "juvenile")
+
+        if (is.vector(ports_pop_juve)) {
+          fill_mat_vec_dbl(N_ports, ports_pop_juve, N_ports_idx)
+        } else if (is.matrix(ports_pop_juve)) {
+          fill_mat_mat_dbl(N_ports, ports_pop_juve, N_ports_idx)
         }
-          }
- 
+
       # Apply carrying capacity upper limit
       ports_logit_factor <- (k_ports - N_ports) / k_ports
 
@@ -851,14 +850,14 @@ for (t_global in seq_along(date_list_ext)) {
         c("larva", "cyprid")), ] <- 1
 
       temp_ports_pop <- N_ports * ports_logit_factor +
-                  port_immigration[(t_global - 1), , ]
+        port_immigration[(t_global - 1), , ]
 
       # Adjust for error where population persists when only 2 individuals are
       # left
       temp_ports_pop[temp_ports_pop < 2] <- 0
 
-          # Round up to nearest integer
-          temp_ports_pop <- ceiling(temp_ports_pop)
+      # Round up to nearest integer
+      temp_ports_pop <- ceiling(temp_ports_pop)
       stopifnot(!is.null(dimnames(temp_ports_pop)[[2]]))
 
     } else {
@@ -896,7 +895,7 @@ for (t_global in seq_along(date_list_ext)) {
       name = "ports_instant_mortality_trace", capture = FALSE)
 
     # Calculate population change on ships
-    # (ships_pop_array[date, lifestage, ship])
+    # ships_pop_array[date, lifestage, ship]
 
     if (t_global > 1) {
       # Model population growth
@@ -952,7 +951,7 @@ for (t_global in seq_along(date_list_ext)) {
       ships_trace_pop[3], ships_trace_pop[4], name = "ships_pop_trace",
       capture = FALSE)
 
-  # Check to see if ship adult pop size is 0, but ports still get invaded
+    # Check to see if ship adult pop size is 0, but ports still get invaded
 
     if ((ports_trace_pop[["larva"]] > 0) & identical(ships_trace_pop[["adult"]],
        0)) stop("Something went wrong")
@@ -968,64 +967,64 @@ for (t_global in seq_along(date_list_ext)) {
 
   alphabet_it <- iterators::iter(letters[1:26])
 
-   # Creates file directories with additional letter to avoid overwriting old
-   # files
+  # Creates file directories with additional letter to avoid overwriting old
+  # files
 
   if (file.exists(results_dir)) results_dir <- paste0(results_dir,
     nextElem(alphabet_it))
- dir.create(results_dir, recursive = TRUE)
+  dir.create(results_dir, recursive = TRUE)
 
-# Save data
-param <- list(parameter = sprintf("parameter%.03d", param_iter),
-  habitat_threshold = habitat_threshold,
-  port_area = port_area,
-  k_ports = k_ports,
-  fw_reduction = fw_reduction,
-  seed_bioregions = list(seed_bioregions),
-  max_density_individuals  = max_density_individuals,
-  larval_dev_lag = larval_dev_lag,
-  mature_lag = mature_lag,
-  repro_lag = repro_lag,
-  ship_port_prob = ship_port_prob,
-  port_compentency_prob = port_compentency_prob
-  )
+  # Save data
+  param <- list(parameter = sprintf("parameter%.03d", param_iter),
+    species = param[["species"]],
+    seed_ports = param[["seed_ports"]],
+    habitat_threshold = habitat_threshold,
+    port_area = port_area,
+    k_ports = k_ports,
+    fw_reduction = fw_reduction,
+    max_density_individuals  = max_density_individuals,
+    larval_dev_lag = larval_dev_lag,
+    mature_lag = mature_lag,
+    repro_lag = repro_lag,
+    ship_port_prob = ship_port_prob,
+    port_compentency_prob = port_compentency_prob)
 
-saveRDS(param, file = file.path(results_dir, sprintf("Parameters_%s%s",
-  Sys.Date(), ".RData")))
+  saveRDS(param, file = file.path(results_dir, sprintf("Parameters_%s%s",
+    Sys.Date(), ".RData")))
 
-flog.info("Parameters saved", name = "model_progress.log")
+  flog.info("Parameters saved", name = "model_progress.log")
 
-saveRDS(ports_pop, file = file.path(results_dir,
-  sprintf("ports_pop_%s%s", Sys.Date(), ".RData")))
+  saveRDS(ports_pop, file = file.path(results_dir,
+    sprintf("ports_pop_%s%s", Sys.Date(), ".RData")))
 
-flog.info("ports_pop saved", name = "model_progress.log")
+  flog.info("ports_pop saved", name = "model_progress.log")
 
-saveRDS(ships_pop, file = file.path(results_dir,
-  sprintf("ships_pop_%s%s", Sys.Date(), ".RData")))
+  saveRDS(ships_pop, file = file.path(results_dir,
+    sprintf("ships_pop_%s%s", Sys.Date(), ".RData")))
 
-flog.info("ships_pop saved", name = "model_progress.log")
+  flog.info("ships_pop saved", name = "model_progress.log")
 
-saveRDS(port_cyprid_compentency, file = file.path(results_dir,
-  sprintf("port_cyprid_compentency_%s%s", Sys.Date(), ".RData")))
+  saveRDS(port_cyprid_compentency, file = file.path(results_dir,
+    sprintf("port_cyprid_compentency_%s%s", Sys.Date(), ".RData")))
 
-flog.info("port_emigration saved", name = "model_progress.log")
+  flog.info("port_emigration saved", name = "model_progress.log")
 
-saveRDS(port_immigration, file = file.path(results_dir,
-  sprintf("port_immigration_%s%s", Sys.Date(), ".RData")))
+  saveRDS(port_immigration, file = file.path(results_dir,
+    sprintf("port_immigration_%s%s", Sys.Date(), ".RData")))
 
-flog.info("port_immigration saved", name = "model_progress.log")
+  flog.info("port_immigration saved", name = "model_progress.log")
 
-saveRDS(ship_emigration, file = file.path(results_dir,
-  sprintf("ship_emigration_%s%s", Sys.Date(), ".RData")))
+  saveRDS(ship_emigration, file = file.path(results_dir,
+    sprintf("ship_emigration_%s%s", Sys.Date(), ".RData")))
 
-flog.info("ship_emigration saved", name = "model_progress.log")
+  flog.info("ship_emigration saved", name = "model_progress.log")
 
-saveRDS(ship_immigration, file = file.path(results_dir,
-  sprintf("ship_immigration_%s%s", Sys.Date(), ".RData")))
+  saveRDS(ship_immigration, file = file.path(results_dir,
+    sprintf("ship_immigration_%s%s", Sys.Date(), ".RData")))
 
-saveRDS(ports_instant_mortality, file = file.path(results_dir,
-  sprintf("ports_instant_mortality_%s%s", Sys.Date(), ".RData")))
+  saveRDS(ports_instant_mortality, file = file.path(results_dir,
+    sprintf("ports_instant_mortality_%s%s", Sys.Date(), ".RData")))
 
-flog.info("ports_instant_mortality saved", name = "model_progress.log")
+  flog.info("ports_instant_mortality saved", name = "model_progress.log")
 
 }  # End of main_model_fn statement

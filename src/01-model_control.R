@@ -4,7 +4,7 @@
 #
 # Author: jmuirhead
 ###############################################################################
-options(error=function()traceback(2))
+options(error = function() traceback(2))
 
 # Pass parameters to model based on arguments supplied to Rscript
 param_iter <- 1
@@ -84,7 +84,7 @@ flog.logger(name = "ports_instant_mortality_trace", TRACE,
   appender = appender.tee(log_name("ports_instant_mortality_trace.log")))
 flog.logger(name = "ships_emigration_trace", TRACE,
   appender = appender.tee(log_name("ships_emigration_trace.log")))
-  
+
 flog.threshold(TRACE, name = "ports_pop_trace")
 flog.threshold(TRACE, name = "ports_n_trace")
 flog.threshold(TRACE, name = "juve_lag")
@@ -123,7 +123,7 @@ port_data <- read.csv(file.path(root_dir(), "data", "port_data.csv"),
 
 
 # Define port area in square meters
-port_area <- yaml_params[["params"]][["port_area"]] # 312 times larger than max wsa for ships, 1546 times larger
+port_area <-  # 312 times larger than max wsa for ships, 1546 times larger
 # than average ship wsa
 
 # Define carrying capacity per square meter
@@ -133,7 +133,7 @@ max_density_individuals <- yaml_params[["params"]][["max_density_individuals"]]
 parameter_grid <- expand.grid(
   species  = yaml_params[["params"]][["sp_name"]],
   seed_ports = yaml_params[["params"]][["seed_ports"]],
-  port_area = port_area,
+  port_area = yaml_params[["params"]][["port_area"]],
   k_ports = port_area * max_density_individuals,
   fw_reduction = yaml_params[["params"]][["fw_reduction"]],
   max_density_individuals = max_density_individuals,
@@ -146,13 +146,20 @@ parameter_grid <- expand.grid(
   stringsAsFactors = FALSE)
 
 habitat_threshold <-  unlist(yaml_params[["params"]][["habitat_threshold"]],
-		recursive = FALSE) %>% as_tibble() %>%
-		tidyr::gather(key = "species", value = "habitat_threshold")
-		
+		recursive = FALSE) %>%
+  as_tibble() %>%
+	tidyr::gather(key = "species", value = "habitat_threshold")
+
 parameter_grid <- left_join(parameter_grid, habitat_threshold, by = "species")
 
 parameter_grid <- parameter_grid %>%
-  filter(!(species == "hypothetical_sp" & seed_ports == "seed_ports2"))
+  filter(!(species == "hypothetical_sp" & seed_ports == "seed_ports2")) %>%
+  mutate(parameter_id = sprintf("parameter%0.3d", seq(nrow(.)))) %>%
+  select(parameter_id, everything())
+
+saveRDS(parameter_grid, file = file.path(root_dir(), "data",
+  "parameters_df.rds"), compress = TRUE)
+
 
 # Extract Ports habitat suitability as a vector --------------------------------
 
@@ -205,7 +212,7 @@ ships_pop_temp <- readRDS(file.path(data_directory, "ships_array.rds"))
 ports_pop_temp <- readRDS(file.path(data_directory, "ports_array.rds"))
 
 
-#ships_instant_mortality <- ships_pop_temp
+# ships_instant_mortality <- ships_pop_temp
 ports_instant_mortality <- ports_pop_temp
 
 # Make sure the ports_pop_temp matrix names are in the right order
@@ -270,7 +277,7 @@ ships_pop <- ships_array_add(ships_pop_temp,
 ports_pop_temp <- ports_array_add(ports_pop_temp,
   lifestages = ship_to_port_lifestages)
 ports_pop <- seed_ports_fn(param = parameter_grid[param_iter, ],
-  seed_names = seed_port_names, ports_pop_temp, 
+  seed_names = seed_port_names, ports_pop_temp,
   lifestages = ship_to_port_lifestages)
 
 source(file.path(root_dir(), "src", "02-main_model.R"))
