@@ -6,7 +6,7 @@
 ###############################################################################
 library("abind")
 
-ships_array_add <- function(ships_pop_input, lifestages){
+ships_array_add <- function(ships_pop_input, lifestages) {
   # This function takes the ships_array generated at the bootstrapping stage
   # and adds another dimension the size of the number of lifestages generated
   # This function also changes the type of array from character to numeric
@@ -18,12 +18,14 @@ ships_array_add <- function(ships_pop_input, lifestages){
   dimnames(ships_temp2)[[3]] <- names(lifestages)
   ships_aperm <- aperm(ships_temp2, c(2, 3, 1)) # Have to change the dimensions
   # of the array in order to use population growth
-  ships_aperm_out <- array(0L, dim = dim(ships_aperm),
-      dimnames = dimnames(ships_aperm))
+  ships_aperm_out <- array(0L,
+    dim = dim(ships_aperm),
+    dimnames = dimnames(ships_aperm)
+  )
   ships_aperm_out
 }
 
-ports_array_add <- function(ports_pop_input, lifestages){
+ports_array_add <- function(ports_pop_input, lifestages) {
   # This function takes the ports_array generated at the bootstrapping stage
   # and adds another dimension the size of the number of lifestages generated
   # This function also changes the type of array from character to numeric
@@ -34,7 +36,9 @@ ports_array_add <- function(ports_pop_input, lifestages){
   dimnames(ports_temp2)[[3]] <- names(lifestages)
   ports_aperm <- aperm(ports_temp2, c(1, 3, 2))
   # Change to numeric data type
-  ports_aperm_out <- array(0L, dim = dim(ports_aperm),
-      dimnames = dimnames(ports_aperm))
+  ports_aperm_out <- array(0L,
+    dim = dim(ports_aperm),
+    dimnames = dimnames(ports_aperm)
+  )
   ports_aperm_out
 }

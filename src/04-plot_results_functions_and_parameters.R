@@ -24,10 +24,7 @@ yaml_params <- yaml::read_yaml(file.path(root_dir(), "params.yaml"))
 
 source_region <- "foo" # Since foo will not be found, run all source_regions
 
-full_sample_datespan <- seq(1, 7301, by = 1)
-
-seed_bioregions <- yaml_params[["params"]][["seed_bioregions"]]
-destination_bioregions <- yaml_params[["params"]][["destination_bioregions"]]
+full_sample_datespan <- seq(13149)
 
 # Define color palettes
 custom_cols <- c("#7D0112FF", "#A14C26FF", "#C17F45FF", "#DAAE6DFF",
@@ -192,7 +189,7 @@ process_array_fn <- function(x, datespan){
   }
 
   if (length(dim(temp)) == 2) {
-    temp2 <- temp[datespan, , , drop = FALSE]
+    temp2 <- temp[datespan, , drop = FALSE]
   }
 
   attr(temp2, "parameter") <-
@@ -209,17 +206,18 @@ list_process_df_fn <- function(x){
 # The output is a data.frame where the attributes assigned to the matrix are
 # added as additional variables.
 
-  x_temp <- reshape2::melt(x, stringsAsFactors = FALSE, as.is = TRUE)
+  temp_cube <- dplyr::as.tbl_cube(x, met_name = "population")
+		temp_df <- as.data.frame(temp_cube)
+			
+  temp_df[["time"]] <- fasttime::fastPOSIXct(temp_df[["time_idx"]], tz = "UTC")
 
-  x_temp[["Time"]] <- fasttime::fastPOSIXct(x_temp[["Var1"]], tz = "UTC")
+## CHECK ON THIS!!!
+  names(temp_df) <- c("date", "lifestage", "port", "population", "time")
 
-  names(x_temp) <- c("date", "lifestage", "location", "population", "time")
-
-  x_temp[["lifestage"]] <- factor(x_temp[["lifestage"]],
+  temp_df[["lifestage"]] <- factor(temp_df[["lifestage"]],
       levels = c("larva", "cyprid", "juvenile", "adult"))
-  x_temp[["parameter"]] <- attr(x, "parameter")
-  x_temp[["bootstrap"]] <- attr(x, "bootstrap")
-  x_temp
+  temp_df[["parameter"]] <- attr(x, "parameter")
+  temp_df
 }
 
 # Store parameters from each of the results

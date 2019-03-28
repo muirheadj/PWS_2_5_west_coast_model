@@ -3,8 +3,7 @@ params:
   choices:
     - coastwise
     - all_traffic
-  scenario: all_traffic
-  seed_ports:
+  scenario:
    - seed_ports1
    - seed_ports2
   sp_name: 
