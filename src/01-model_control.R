@@ -346,11 +346,19 @@ source(file.path(root_dir(), "src", "02-main_model.R"))
 
 sourceCpp(file.path(root_dir(), "src", "arma_cube.cpp"), verbose = FALSE)
 
-model_run <- main_model_fn(ship_imo_tbl,
+model_run <- main_model_fn(ship_imo_tbl = ship_imo_tbl,
   param = parameter_grid[param_iter, ],
-  pop_transition, ports_pop, root_dir(), data_directory, param_iter, boot_iter,
-  ship_to_port_lifestages, port_to_ship_lifestages, ships_instant_mortality,
-  ports_instant_mortality, ports_habitat_suitability
+  A_mat = pop_transition,
+  ports_pop = ports_pop,
+  root_dir(),
+  data_directory,
+  param_iter,
+  boot_iter,
+  ship_to_port_lifestages,
+  port_to_ship_lifestages,
+  ships_instant_mortality,
+  ports_instant_mortality,
+  ports_habitat_suitability
 )
 
 flog.info("Finished model run", name = "model_progress.log")
