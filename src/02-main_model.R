@@ -420,7 +420,7 @@ port_juvenile_production_fn <-
             wsa_scale = port_area / sum(effective_wsa, port_area,
               na.rm = TRUE
             ),
-            frac_transferred = rbinom(1, size = 1000, prob = 0.04) / 1000
+            frac_transferred = rbinom(1, size = 1000, prob = 5.428304e-02) / 1000
           )
 
         # The number of new juveniles is the available pool scaled by relative
@@ -449,7 +449,7 @@ port_juvenile_production_fn <-
 
 # Freshwater dip reduction function
 fw_reduction_fn <- function(ships_pop_input, x, ship_position,
-                            t1 = t1_position_idx, fw = fw_reduction) {
+  t1 = t1_position_idx, fw = fw_reduction) {
   # Get names of ships that are in the Panama Canal at time t-1
 
   ship_position_panama_canal <- ship_position[,
@@ -473,8 +473,8 @@ fw_reduction_fn <- function(ships_pop_input, x, ship_position,
   ships_pop_input
 }
 
-ships_underway_larval_reduction_fn <- function(ships_pop_input, x,
-                                               ship_position, t1 = t1_position_idx) {
+ships_underway_larval_reduction_fn <-
+  function(ships_pop_input, x, ship_position, t1 = t1_position_idx) {
   # Get names of ships that are on the move at time t-1
   position_underway <- ship_position[, , t1, drop = TRUE]
   ship_names_underway <- names(position_underway[is.na(position_underway)])
@@ -972,7 +972,7 @@ main_model_fn <- function(ship_imo_tbl, param_grid, A_mat, ports_pop, ...) {
 
       # Adjust for error where population persists when only 2 individuals are
       # left
-      temp_ports_pop[temp_ports_pop < 2] <- 0
+      temp_ports_pop[temp_ports_pop <= 2] <- 0
 
       # Round up to nearest integer
       temp_ports_pop <- ceiling(temp_ports_pop)

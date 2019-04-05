@@ -20,7 +20,7 @@ library("rprojroot")
 root_crit <- has_dirname("PWS_2_5_west_coast_model", subdir = "src")
 root_dir <- root_crit$make_fix_file()
 
-results_dir <- find_root_file("results", criterion = root_crit)
+results_dir <- find_root_file("results", "population_stability", criterion = root_crit)
 figures_dir <- find_root_file("figures", criterion = root_crit)
 data_dir <- find_root_file("data", criterion = root_crit)
 
@@ -47,19 +47,11 @@ parameters_df <- parameters_df %>%
   unique() %>%
   mutate(
     fw_reduction = 1 - as.numeric(fw_reduction),
-    seed_source = factor(seed_source)
-  ) %>%
-  mutate(`Source; FW reduction` = factor(interaction(seed_source,
-    fw_reduction,
-    sep = "; "
-  ))) %>%
-  mutate(`Source; FW reduction` = forcats::fct_reorder(
-    `Source; FW reduction`,
-    fw_reduction
-  )) %>%
-  select(parameter, seed_bioregion, `Source; FW reduction`)
+    scenario = factor(scenario)
+  )  %>%
+  select(parameter_id, species, scenario)
 
-save_object_to_data_dir(parameters_df, include_date = FALSE)
+#save_object_to_data_dir(parameters_df, include_date = FALSE)
 
 # Read in port information containing scenario info, coordinates, etc
 port_data <- readr::read_csv(file.path(data_dir, "port_data.csv"))
@@ -93,7 +85,7 @@ flog.info("Converting ports temp array into data.frame",
   name = "model_progress_log"
 )
 
-ports_base_long <- list_process_df_fn(ports_temp[[3]])
+ports_base_long <- purrr::map(ports_temp[[1]], list_process_df_fn)
 
 rm(ports_temp)
 

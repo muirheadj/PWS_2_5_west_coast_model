@@ -6,8 +6,8 @@
 ###############################################################################
 
 # Pass parameters to model based on arguments supplied to Rscript
-param_iter <- commandArgs(trailingOnly = TRUE)
-param_iter <- as.integer((param_iter))
+
+param_iter <- 1
 
 suppressMessages(TRUE)
 
@@ -82,41 +82,30 @@ log_name <- function(x) file.path(
     sprintf("parameter%03d_%s", as.numeric(param_iter[1]), x)
   )
 
+#flog.logger(
+#  name = "ports_pop_trace", TRACE,
+#  appender = appender.tee(log_name("stab_ports_pop_trace.log"))
+#)
+
 flog.logger(
   name = "ports_pop_trace", TRACE,
-  appender = appender.tee(log_name("ports_pop_trace.log"))
+  appender = appender.console()
 )
-flog.logger(
-  name = "ports_n_trace", TRACE,
-  appender = appender.tee(log_name("ports_n_trace.log"))
-)
+
 flog.logger(
   name = "model_progress", INFO,
   appender = appender.console()
 )
+
+
 flog.logger(
   name = "juve_lag", TRACE,
-  appender = appender.tee(log_name("juvenile_trace.log"))
-)
-flog.logger(
-  name = "ships_pop_trace", TRACE,
-  appender = appender.tee(log_name("ships_pop_trace.log"))
-)
-flog.logger(
-  name = "ports_instant_mortality_trace", TRACE,
-  appender = appender.tee(log_name("ports_instant_mortality_trace.log"))
-)
-flog.logger(
-  name = "ships_emigration_trace", TRACE,
-  appender = appender.tee(log_name("ships_emigration_trace.log"))
+  appender = appender.console()
 )
 
-flog.threshold(TRACE, name = "ports_pop_trace")
-flog.threshold(TRACE, name = "ports_n_trace")
-flog.threshold(TRACE, name = "juve_lag")
-flog.threshold(TRACE, name = "ships_emigration_trace")
-flog.threshold(TRACE, name = "ships_pop_trace")
-flog.threshold(INFO, name = "ports_instant_mortality_trace")
+
+flog.threshold(TRACE, name = "stab_ports_pop_trace")
+flog.threshold(TRACE, name = "stab_juve_lag")
 
 # Identify species
 sp_name <- yaml_params[["params"]][["sp_name"]]
@@ -132,23 +121,6 @@ port_to_ship_lifestages <- c(
   "adult" = 0
 )
 
-
-# Population transition matrix
-pop_transition <- matrix(data = c(
-  0.7, 0, 0, 2.4, 0.12, 0.7, 0, 0, 0, 0.08,
-  0.8, 0, 0, 0, 0.12, 0.975
-), nrow = 4, ncol = 4, byrow = TRUE)
-
-
-pop_transition <- matrix(c(0.81, 0, 0, 1.4,
-              0.224407, 0.2, 0, 0,
-              0, 0.004, 0.8, 0,
-              0, 0, 0.00092, 0.97), nrow = 4,
-            byrow = TRUE)
-
-dimnames(pop_transition)[[1]] <- dimnames(pop_transition)[[2]] <-
-  names(ship_to_port_lifestages)
-
 # Reproductive and development time lag in seconds
 larval_dev_lag <- yaml_params[["params"]][["larval_dev_lag"]] # 7 days until cyprids can appear
 juvenile_lag <- yaml_params[["params"]][["juvenile_lag"]] # 1 day until juveniles can first appear after cyprids appear in the population
@@ -161,13 +133,21 @@ port_data <- read.csv(file.path(root_dir(), "data", "port_data.csv"),
   stringsAsFactors = FALSE
 )
 
-
 # Define port area in square meters
-port_area <- # 312 times larger than max wsa for ships, 1546 times larger
+port_area <- yaml_params[["params"]][["port_area"]]# 312 times larger than max wsa for ships, 1546 times larger
   # than average ship wsa
 
   # Define carrying capacity per square meter
   max_density_individuals <- yaml_params[["params"]][["max_density_individuals"]]
+
+  pop_transition <- matrix(c(
+    0.78878571, 0, 0, 13.69,
+    0.02921429, 0.76824666, 0, 0,
+    0, 0.01175334, 0.56811301, 0,
+    0, 0, 0.01188699,  0.9979748), nrow = 4, byrow = TRUE)
+
+  rownames(pop_transition) <- colnames(pop_transition) <-
+    names(ship_to_port_lifestages)
 
 # Generate combination of parameters
 parameter_grid <- expand.grid(
@@ -249,36 +229,11 @@ data_directory <- file.path(
 
 flog.info("data directory: %s", data_directory, name = "model_progress.log")
 
-# Get ship imo info, ships_array and ports_array (population arrays)
-ship_imo_tbl <- readRDS(file.path(
-  data_directory, "ship_movements",
-  "ship_imo_tbl.rds"
-))
-
-# Set the effective wsa for ships to be 10% of the wetted surface area
-effective_wsa_scale <- yaml_params[["params"]][["effective_wsa_scale"]]
-
-ship_imo_tbl[["effective_wsa"]] <- ship_imo_tbl[["wsa"]] * effective_wsa_scale
-
-# Pre-allocate memory for ships and ports arrays
-ships_pop_temp <- readRDS(file.path(
-  data_directory, "ship_movements",
-  "ships_array.rds"
-))
 ports_pop_temp <- readRDS(file.path(
   data_directory, "ship_movements",
   "ports_array.rds"
 ))
 
-# Keep track of instant mortality in ports which has the same array dimensions
-# as ports_pop_temp
-ports_instant_mortality <- ports_pop_temp
-
-# Make sure the ports_pop_temp matrix names are in the right order
-dimnames(ports_pop_temp)[["port"]] <- sort(dimnames(ports_pop_temp)[["port"]])
-
-dimnames(ports_instant_mortality)[["port"]] <-
-  sort(dimnames(ports_instant_mortality)[["port"]])
 
 
 # Get list of bootstrapped ship populations
@@ -304,8 +259,8 @@ seed_ports_fn <- function(param, seed_names, ports_pop_input, lifestages) {
   n_at_carrying_capacity <- param[, "k_ports"]
 
   n_at_stability <- c(
-    larva = 3334269129, cyprid = 1000280739,
-    juvenile = 264593012, adult = 416783641
+    larva =  852782219 , cyprid =  89274725,
+    juvenile = 11185729 , adult = 30359726
   )
 
   seed_value <- array(
@@ -331,13 +286,11 @@ seed_ports_fn <- function(param, seed_names, ports_pop_input, lifestages) {
 sourceCpp(file.path(root_dir(), "src", "popgrow.cpp"), verbose = FALSE)
 
 # Source c++ version of stochastic matrix
-sourceCpp(file.path(root_dir(), "src", "stoch_pop_growth.cpp"), verbose = FALSE)
+sourceCpp(file.path(root_dir(), "src", "stoch_pop_growth_stab.cpp"), verbose = FALSE)
 
 
 # Add a dimension for the number of life stages in the population
-ships_pop <- ships_array_add(ships_pop_temp,
-  lifestages = ship_to_port_lifestages
-)
+
 ports_pop_temp <- ports_array_add(ports_pop_temp,
   lifestages = ship_to_port_lifestages
 )
@@ -347,7 +300,7 @@ ports_pop <- seed_ports_fn(
   lifestages = ship_to_port_lifestages
 )
 
-source(file.path(root_dir(), "src", "02-main_model.R"))
+source(file.path(root_dir(), "src", "02a-population_stability.R"))
 
 # Run main model ---------------------------------------------------------------
 
@@ -360,12 +313,7 @@ model_run <- main_model_fn(ship_imo_tbl = ship_imo_tbl,
   root_dir(),
   data_directory,
   param_iter,
-  boot_iter,
-  ship_to_port_lifestages,
-  port_to_ship_lifestages,
-  ships_instant_mortality,
-  ports_instant_mortality,
-  ports_habitat_suitability
+  boot_iter
 )
 
 flog.info("Finished model run", name = "model_progress.log")
