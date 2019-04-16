@@ -6,6 +6,40 @@
 ################################################################################
 
 # Helper functions
+chunkr <- function(vec, chunk_size = NULL, n_chunks = NULL,
+                   use_bit_package = FALSE) {
+  if (is.null(chunk_size) && is.null(n_chunks)) {
+    stop(stri_c(
+      "You must provide either the size of the chunks ",
+      " or number of desired chunks"
+    ))
+  }
+
+  if (is.null(chunk_size)) {
+    if (n_chunks == 1) {
+      chunk <- vec
+    } else {
+      chunk <- split(vec, cut(seq_along(vec), n_chunks, labels = FALSE))
+    }
+  }
+  if (is.null(n_chunks)) {
+    chunk <- split(
+      vec,
+      ceiling(seq_along(vec) / chunk_size)
+    )
+  }
+
+  if (use_bit_package == TRUE) {
+    chunk <- bit::chunk(
+      from = 1, to = length(vec),
+      by = chunk_size, length.out = n_chunks
+    )
+  }
+  chunk
+}
+
+`%nin%` <- Negate(`%in%`)
+
 
 find_date_in_chunk_fn <- function(date_slice, date_list_ext_chunks) {
   # This function finds out which chunk a particular date is in.  The 'name' of
@@ -329,11 +363,6 @@ ship_immigration_fn <-
           port_to_ship_migration_size[["juvenile"]])
         p_random <- runif(n = length(prob_establishment), min = 0, max = 1)
 
-        # Keep track of instant mortality on ships
-        # ships_instant_mortality[match(names(prob_establishment),
-        #  rownames(ships_instant_mortality)),
-        # (x - 1)] <<- (p_random < prob_establishment)
-
         port_to_ship_migration_size[["juvenile"]] <-
           (p_random < prob_establishment) *
             port_to_ship_migration_size[["juvenile"]]
@@ -346,8 +375,7 @@ ship_immigration_fn <-
           melt(value.name = "pop", id.vars = "ships") %>%
           acast(variable ~ ships,
             value.var = "pop",
-            fun.aggregate = function(x) sum(x, na.rm = TRUE), drop = FALSE
-          )
+            fun.aggregate = function(x) sum(x, na.rm = TRUE), drop = FALSE)
 
         ships_immnigration_idx <- cube_match_fn(t1_date_global,
           A = ship_immigration_input,
@@ -984,9 +1012,6 @@ main_model_fn <- function(ship_imo_tbl, param_grid, A_mat, ports_pop, ...) {
 
     ports_pop_idx <- cube_match_fn(t_date_global, ports_pop, temp_ports_pop)
 
-
-				browser()
-				
     fill_cube_dbl(ports_pop, temp_ports_pop, ports_pop_idx)
     
     ports_trace_pop <-
@@ -1075,26 +1100,29 @@ main_model_fn <- function(ship_imo_tbl, param_grid, A_mat, ports_pop, ...) {
 
     fill_cube_int(ships_pop, temp_ships_pop, ships_pop_idx)
 
-    ships_trace_pop <- matrixStats::rowMeans2(temp_ships_pop)
-
-    names(ships_trace_pop) <- dimnames(temp_ships_pop)[[1]]
-
-    flog.trace("parameter%s ships_population %i %f %f %f %f", sprintf(
-      "%.03d",
-      param_iter
-    ), t_global, ships_trace_pop[1], ships_trace_pop[2],
-    ships_trace_pop[3], ships_trace_pop[4],
-    name = "ships_pop_trace",
-    capture = FALSE
-    )
-
-    # Check to see if ship adult pop size is 0, but ports still get invaded
-
-    if ((ports_trace_pop[["larva"]] > 0) & identical(
-      ships_trace_pop[["adult"]],
-      0
-    )) {
-      stop("Something went wrong")
+				if (logger.options()$logger.ships_pop_trace$threshold == 9) {
+				
+				# Calculate ship populations only if the values are being logged.
+				  ships_trace_pop <- matrixStats::rowMeans2(temp_ships_pop)
+				  
+				  names(ships_trace_pop) <- dimnames(temp_ships_pop)[[1]]
+				  
+				  flog.trace("parameter%s ships_population %i %f %f %f %f",
+				    sprintf("%.03d", param_iter),
+				    t_global,
+				    ships_trace_pop[1],
+				    ships_trace_pop[2],
+        ships_trace_pop[3],
+        ships_trace_pop[4],
+        name = "ships_pop_trace",
+        capture = FALSE)
+        
+      # Check to see if ship adult pop size is 0, but ports still get invaded
+        
+      if ((ports_trace_pop[["larva"]] > 0) &
+        identical(ships_trace_pop[["adult"]], 0)) {
+          stop("Something went wrong")
+      }
     }
 
     flog.info("Model date: %s Parameter: %i Iteration %i completed",

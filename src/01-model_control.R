@@ -5,6 +5,8 @@
 # Author: jmuirhead
 ###############################################################################
 
+param_iter <- 2
+
 # Pass parameters to model based on arguments supplied to Rscript
 param_iter <- commandArgs(trailingOnly = TRUE)
 param_iter <- as.integer((param_iter))
@@ -37,92 +39,47 @@ options(tibble.width = Inf)
 
 yaml_params <- yaml::read_yaml(file.path(root_dir(), "params.yaml"))
 
-# Helper functions
-chunkr <- function(vec, chunk_size = NULL, n_chunks = NULL,
-                   use_bit_package = FALSE) {
-  if (is.null(chunk_size) && is.null(n_chunks)) {
-    stop(stri_c(
-      "You must provide either the size of the chunks ",
-      " or number of desired chunks"
-    ))
-  }
-
-  if (is.null(chunk_size)) {
-    if (n_chunks == 1) {
-      chunk <- vec
-    } else {
-      chunk <- split(vec, cut(seq_along(vec), n_chunks, labels = FALSE))
-    }
-  }
-  if (is.null(n_chunks)) {
-    chunk <- split(
-      vec,
-      ceiling(seq_along(vec) / chunk_size)
-    )
-  }
-
-  if (use_bit_package == TRUE) {
-    chunk <- bit::chunk(
-      from = 1, to = length(vec),
-      by = chunk_size, length.out = n_chunks
-    )
-  }
-  chunk
-}
-
-`%nin%` <- Negate(`%in%`)
-
-# Wrapper for table to always report missing values
-table <- function(..., useNA = "always") base::table(..., useNA = useNA)
-
 # Set up tracer and info loggers
 
 log_name <- function(x) file.path(
     root_dir(), "logs",
     sprintf("parameter%03d_%s", as.numeric(param_iter[1]), x)
   )
+  
+get_flog_level <- function(name){
+  res <- logger.options()[[paste0("logger.", name)]][["threshold"]]
+  res
+}
+  
 
-flog.logger(
-  name = "ports_pop_trace", TRACE,
-  appender = appender.tee(log_name("ports_pop_trace.log"))
-)
-flog.logger(
-  name = "ports_n_trace", TRACE,
-  appender = appender.tee(log_name("ports_n_trace.log"))
-)
-flog.logger(
-  name = "model_progress", INFO,
-  appender = appender.console()
-)
-flog.logger(
-  name = "juve_lag", TRACE,
-  appender = appender.tee(log_name("juvenile_trace.log"))
-)
-flog.logger(
-  name = "ships_pop_trace", TRACE,
-  appender = appender.tee(log_name("ships_pop_trace.log"))
-)
-flog.logger(
-  name = "ports_instant_mortality_trace", TRACE,
-  appender = appender.tee(log_name("ports_instant_mortality_trace.log"))
-)
-flog.logger(
-  name = "ships_emigration_trace", TRACE,
-  appender = appender.tee(log_name("ships_emigration_trace.log"))
-)
+flog.logger("ports_pop_trace", TRACE,
+  appender = appender.tee(log_name("ports_pop_trace.log")))
 
-flog.threshold(TRACE, name = "ports_pop_trace")
-flog.threshold(TRACE, name = "ports_n_trace")
-flog.threshold(TRACE, name = "juve_lag")
-flog.threshold(TRACE, name = "ships_emigration_trace")
-flog.threshold(TRACE, name = "ships_pop_trace")
-flog.threshold(INFO, name = "ports_instant_mortality_trace")
+flog.logger("ports_n_trace", TRACE,
+  appender = appender.tee(log_name("ports_n_trace.log")))
+  
+flog.logger("model_progress", INFO,
+  appender = appender.console())
+  
+flog.logger("juve_lag", TRACE,
+  appender = appender.tee(log_name("juvenile_trace.log")))
+  
+flog.logger("ships_pop_trace", TRACE,
+  appender = appender.tee(log_name("ships_pop_trace.log")))
+  
+flog.logger( "ports_instant_mortality_trace", TRACE,
+  appender = appender.tee(log_name("ports_instant_mortality_trace.log")))
+  
+flog.logger("ships_emigration_trace", TRACE,
+  appender = appender.tee(log_name("ships_emigration_trace.log")))
+
+flog.threshold(INFO)
 
 # Identify species
 sp_name <- yaml_params[["params"]][["sp_name"]]
 
-
 # Set up lifestages, incl which lifestages disperse (sp = ship to port)
+
 ship_to_port_lifestages <- c(
   "larva" = 1, "cyprid" = 0, "juvenile" = 0,
   "adult" = 0
@@ -132,10 +89,9 @@ port_to_ship_lifestages <- c(
   "adult" = 0
 )
 
-
 # Population transition matrix
 pop_transition <- readRDS(file.path(root_dir(), "data",
-  "bal_improv_pop_transition.rds"))
+  "bal_improvisus_pop_transition.rds"))
 
 # Reproductive and development time lag in seconds
 larval_dev_lag <- yaml_params[["params"]][["larval_dev_lag"]] # 7 days until cyprids can appear
@@ -149,13 +105,12 @@ port_data <- read.csv(file.path(root_dir(), "data", "port_data.csv"),
   stringsAsFactors = FALSE
 )
 
-
 # Define port area in square meters
 port_area <- # 312 times larger than max wsa for ships, 1546 times larger
   # than average ship wsa
 
-  # Define carrying capacity per square meter
-  max_density_individuals <- yaml_params[["params"]][["max_density_individuals"]]
+# Define carrying capacity per square meter
+max_density_individuals <- yaml_params[["params"]][["max_density_individuals"]]
 
 # Generate combination of parameters
 parameter_grid <- expand.grid(
@@ -175,8 +130,8 @@ parameter_grid <- expand.grid(
 )
 
 habitat_threshold <- unlist(yaml_params[["params"]][["habitat_threshold"]],
-  recursive = FALSE
-) %>%
+    recursive = FALSE
+  ) %>%
   as_tibble() %>%
   tidyr::gather(key = "species", value = "habitat_threshold")
 
@@ -292,8 +247,8 @@ seed_ports_fn <- function(param, seed_names, ports_pop_input, lifestages) {
   n_at_carrying_capacity <- param[, "k_ports"]
 
   n_at_stability <- c(
-    larva = 3334269129, cyprid = 1000280739,
-    juvenile = 264593012, adult = 416783641
+    larva = 837611569, cyprid = 92118541,
+    juvenile = 11155834, adult = 31199732
   )
 
   seed_value <- array(
@@ -351,7 +306,6 @@ model_run <- main_model_fn(ship_imo_tbl = ship_imo_tbl,
   boot_iter,
   ship_to_port_lifestages,
   port_to_ship_lifestages,
-  ships_instant_mortality,
   ports_instant_mortality,
   ports_habitat_suitability
 )

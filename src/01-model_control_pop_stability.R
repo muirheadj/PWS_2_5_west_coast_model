@@ -36,55 +36,12 @@ options(tibble.width = Inf)
 
 yaml_params <- yaml::read_yaml(file.path(root_dir(), "params.yaml"))
 
-# Helper functions
-chunkr <- function(vec, chunk_size = NULL, n_chunks = NULL,
-                   use_bit_package = FALSE) {
-  if (is.null(chunk_size) && is.null(n_chunks)) {
-    stop(stri_c(
-      "You must provide either the size of the chunks ",
-      " or number of desired chunks"
-    ))
-  }
-
-  if (is.null(chunk_size)) {
-    if (n_chunks == 1) {
-      chunk <- vec
-    } else {
-      chunk <- split(vec, cut(seq_along(vec), n_chunks, labels = FALSE))
-    }
-  }
-  if (is.null(n_chunks)) {
-    chunk <- split(
-      vec,
-      ceiling(seq_along(vec) / chunk_size)
-    )
-  }
-
-  if (use_bit_package == TRUE) {
-    chunk <- bit::chunk(
-      from = 1, to = length(vec),
-      by = chunk_size, length.out = n_chunks
-    )
-  }
-  chunk
-}
-
-`%nin%` <- Negate(`%in%`)
-
-# Wrapper for table to always report missing values
-table <- function(..., useNA = "always") base::table(..., useNA = useNA)
-
 # Set up tracer and info loggers
 
 log_name <- function(x) file.path(
     root_dir(), "logs",
     sprintf("parameter%03d_%s", as.numeric(param_iter[1]), x)
   )
-
-#flog.logger(
-#  name = "ports_pop_trace", TRACE,
-#  appender = appender.tee(log_name("stab_ports_pop_trace.log"))
-#)
 
 flog.logger(
   name = "ports_pop_trace", TRACE,
