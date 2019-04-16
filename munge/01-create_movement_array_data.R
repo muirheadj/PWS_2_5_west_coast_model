@@ -23,7 +23,7 @@ root_dir <- root_crit$make_fix_file()
 
 # Read in config file for the different scenarios
 yaml_params <- yaml::read_yaml(file.path(root_dir(), "params.yaml"))
-scenario <- yaml_params[["params"]][["scenario"]]
+scenario <- "ship_movements"
 
 # Make directories for each choice
 create_missing_directories <- function(x, root) {
@@ -152,12 +152,11 @@ coastwise_previous_ports <- arrivals_full %>%
 
 port_data <- bind_rows(arrival_ports, previous_ports) %>%
   unique() %>%
-  filter(
+  filter(port != "Beaufort Sea",
     !is.na(lat) | !is.na(lon), !is.na(bioregion),
     (coast %in% c("Alaska", "ca-west", "West") | bioregion == "NA-S1")
   ) %>%
   arrange(port)
-
 
 coastwise_port_data <-
   bind_rows(coastwise_arrival_ports, coastwise_previous_ports) %>%

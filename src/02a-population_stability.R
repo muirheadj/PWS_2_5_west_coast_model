@@ -224,6 +224,7 @@ main_model_fn <- function(ship_imo_tbl, param_grid, A_mat, ports_pop, ...) {
 
     fill_cube_dbl(ports_pop, temp_ports_pop, ports_pop_idx)
 
+
     ports_trace_pop <-
       rowMeans(temp_ports_pop[, dimnames(temp_ports_pop)[[2]] %in% seed_ports])
 

@@ -38,16 +38,16 @@ List port_stoch_pop(NumericMatrix Aorig, SEXP curtime, DataFrame ds){
   int l = 1000;
 
   // Generate deviates for the diagonals
-  std::binomial_distribution <> A0_bd(l, 5.032955e-01);
-  std::binomial_distribution <> A5_bd(l, 8.857170e-01);
-  std::binomial_distribution <> A10_bd(l, 5.726674e-01);
-  std::binomial_distribution <> A15_bd(l, 9.979913e-01);
+  std::binomial_distribution <> A0_bd(l, Aorig[0]);
+  std::binomial_distribution <> A5_bd(l, Aorig[5]);
+  std::binomial_distribution <> A10_bd(l, Aorig[10]);
+  std::binomial_distribution <> A15_bd(l, Aorig[15]);
 
   //off-diagonals
-  std::normal_distribution <double> A1_nd(1.170455e-02, 1.170455e-03);
-  std::binomial_distribution <> A6_bd(l, 5.428304e-02);
-  std::normal_distribution <double> A11_nd(7.332562e-03, 7.332562e-04);
-  std::normal_distribution <double> A12_nd(13.69, 1.369);
+  std::normal_distribution <double> A1_nd(Aorig[1], Aorig[1]/10);
+  std::binomial_distribution <> A6_bd(l, Aorig[6]);
+  std::normal_distribution <double> A11_nd(Aorig[11], Aorig[1]/10);
+  std::normal_distribution <double> A12_nd(Aorig[12], Aorig[12]/10);
 
   for(int j = 0; j < k; j++){ // for each ship or port
     NumericMatrix Aout(4,4);
@@ -112,16 +112,16 @@ List ship_stoch_pop(NumericMatrix Aorig, SEXP curtime, DataFrame ds){
   int l = 1000;
 
   // Generate deviates for the diagonals
-  std::binomial_distribution <> A0_bd(l, 5.032955e-01);
-  std::binomial_distribution <> A5_bd(l, 8.857170e-01);
-  std::binomial_distribution <> A10_bd(l, 5.726674e-01);
-  std::binomial_distribution <> A15_bd(l, 9.979913e-01);
+  std::binomial_distribution <> A0_bd(l, Aorig[0]);
+  std::binomial_distribution <> A5_bd(l, Aorig[5]);
+  std::binomial_distribution <> A10_bd(l, Aorig[10]);
+  std::binomial_distribution <> A15_bd(l, Aorig[15]);
 
   //off-diagonals
-  std::normal_distribution <double> A1_nd(1.170455e-02, 1.170455e-03);
-  std::binomial_distribution <> A6_bd(l, 5.428304e-02);
-  std::normal_distribution <double> A11_nd(7.332562e-03, 7.332562e-04);
-  std::normal_distribution <double> A12_nd(13.69, 1.369);
+  std::normal_distribution <double> A1_nd(Aorig[1], Aorig[1]/10);
+  std::binomial_distribution <> A6_bd(l, Aorig[6]);
+  std::normal_distribution <double> A11_nd(Aorig[11], Aorig[1]/10);
+  std::normal_distribution <double> A12_nd(Aorig[12], Aorig[12]/10);
 
   for(int j = 0; j < k; j++){ // for each ship or port
     Rcpp::NumericMatrix Aout(4,4);

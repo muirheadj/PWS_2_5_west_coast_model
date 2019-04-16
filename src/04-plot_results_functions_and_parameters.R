@@ -11,7 +11,7 @@ library("forcats")
 library("ggplot2")
 library("yaml")
 library("rprojroot")
- 
+
 root_crit <- has_dirname("PWS_2_5_west_coast_model", subdir = "src")
 root_dir <- root_crit$make_fix_file()
 
@@ -113,7 +113,7 @@ save_object_to_data_dir <- function(x, include_date = FALSE) {
 # with the filename the same as an object with the date appended to it.
 
   xsym <- lazyeval::expr_text(x)
-  
+
 	if (include_date == FALSE) {
 	  saveRDS(x, file = file.path(data_dir, stringi::stri_c(xsym, ".rds")))
 	}
@@ -207,12 +207,9 @@ list_process_df_fn <- function(x){
 # added as additional variables.
 
   temp_cube <- dplyr::as.tbl_cube(x, met_name = "population")
-		temp_df <- as.data.frame(temp_cube)
-			
-  temp_df[["time"]] <- fasttime::fastPOSIXct(temp_df[["time_idx"]], tz = "UTC")
+		temp_df <- as_tibble(temp_cube)
 
-## CHECK ON THIS!!!
-  names(temp_df) <- c("date", "lifestage", "port", "population", "time")
+  temp_df[["time_idx"]] <- fasttime::fastPOSIXct(temp_df[["time_idx"]], tz = "UTC")
 
   temp_df[["lifestage"]] <- factor(temp_df[["lifestage"]],
       levels = c("larva", "cyprid", "juvenile", "adult"))
@@ -238,11 +235,11 @@ process_ports_fn <- function(i){
   n_destination_ports <- readRDS(create_filelist_from_data("n_destination_ports", 1))
 
   flog.info("Started reading ports_temp", name = "model_progress_log")
-  
+
   ports_temp_subset <- readRDS(file.path(data_dir, "ports_temp.rds"))[[i]]
-  
+
   flog.info("Finished reading ports_temp", name = "model_progress_log")
-  
+
   # Note: as.Date assumes that the TZ is "UTC"
   ports_longformat_with_coords <- list_process_df_fn(ports_temp_subset) %>%
     left_join(port_data, by = c("location" = "port")) %>%
@@ -262,9 +259,9 @@ process_ports_fn <- function(i){
     select(parameter, bootstrap) %>%
     unique() %>%
     unlist()
-	
+
   param_label <- sprintf("%s_%s", param[[1]], param[[2]])
-  
+
   rm(ports_temp_subset)
 
 # Get source ports in order to exclude them from summary
@@ -380,7 +377,7 @@ process_port_immigration_fn <- function(i) {
     ungroup()
 
   rm(port_immigration_subset)
-  
+
   # Calculate population size. Note: Exclude Panama Canal from immigration
   # calculations
   port_immigration_daily_mean <- ports_immigration_with_coords %>%

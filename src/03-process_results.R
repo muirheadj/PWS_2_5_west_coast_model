@@ -85,24 +85,22 @@ flog.info("Converting ports temp array into data.frame",
   name = "model_progress_log"
 )
 
-ports_base_long <- purrr::map(ports_temp[[1]], list_process_df_fn)
+ports_array <- ports_temp[[1]]
+
+ports_base_long <- list_process_df_fn(ports_array)
 
 rm(ports_temp)
 
 ports_base_long <- ports_base_long %>%
-  left_join(port_data, by = c("Location" = "PortStd")) %>%
-  left_join(parameters_df, by = "parameter") %>%
+  left_join(parameters_df, by = c("parameter" = "parameter_id")) %>%
+  left_join(port_data) %>%
   mutate(
-    date = as.Date(Time),
-    seed_port = if_else(reg_lrggeo == seed_bioregion, "Source port",
+    date = as.Date(time_idx),
+    seed_port = if_else(occurrance == 1, "Source port",
       "Destination port"
-    )
-  ) %>%
-  select(bootstrap, parameter, reg_lrggeo, location, seed_port, lifestage,
-    date, Time,
-    population = Population
-  ) %>%
-  as_tibble()
+    )) %>%
+  select(parameter, bioregion, port, seed_port, lifestage,
+    date, time_idx, population)
 
 save_object_to_data_dir(ports_base_long)
 flog.info("Saved ports_base_long", name = "model_progress_log")
@@ -113,19 +111,8 @@ if (!exists("ports_base_long")) {
 
 # Port population info, every time step, for destination ports only, no coordinates
 destination_ports <- ports_base_long %>%
-  filter(reg_lrggeo %in% destination_bioregions) %>%
+  filter(seed_port == "Destination port") %>%
   ungroup()
-
-# Calculate number of ports in the Caribbean
-n_carI_ports <- destination_ports %>%
-  summarize(n = n_distinct(location)) %>%
-  unlist() %>%
-  as.vector()
-
-save_object_to_data_dir(n_carI_ports, include_date = FALSE)
-
-# Number of invaded Caribbean Ports
-n_carI_ports <- readRDS(create_filelist_from_data("n_carI_ports", 1))
 
 # This section runs all the subroutinese to process the results for each of
 # the ports across all parameters

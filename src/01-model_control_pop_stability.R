@@ -13,7 +13,6 @@ suppressMessages(TRUE)
 
 library("methods")
 library("utils")
-library("reshape2")
 library("data.table")
 library("lazyeval")
 library("dplyr")
@@ -137,17 +136,12 @@ port_data <- read.csv(file.path(root_dir(), "data", "port_data.csv"),
 port_area <- yaml_params[["params"]][["port_area"]]# 312 times larger than max wsa for ships, 1546 times larger
   # than average ship wsa
 
-  # Define carrying capacity per square meter
-  max_density_individuals <- yaml_params[["params"]][["max_density_individuals"]]
+# Define carrying capacity per square meter
+max_density_individuals <- yaml_params[["params"]][["max_density_individuals"]]
 
-  pop_transition <- matrix(c(
-    0.78878571, 0, 0, 13.69,
-    0.02921429, 0.76824666, 0, 0,
-    0, 0.01175334, 0.56811301, 0,
-    0, 0, 0.01188699,  0.9979748), nrow = 4, byrow = TRUE)
+pop_transition <- readRDS(file.path(root_dir(), "data",
+	"bal_improvisus_pop_transition.rds"))
 
-  rownames(pop_transition) <- colnames(pop_transition) <-
-    names(ship_to_port_lifestages)
 
 # Generate combination of parameters
 parameter_grid <- expand.grid(
@@ -268,9 +262,9 @@ seed_ports_fn <- function(param, seed_names, ports_pop_input, lifestages) {
       each = dim(ports_pop_input)[1]
     ),
     dim = list(dim(ports_pop_input)[1], length(lifestages), nrow(seed_names)),
-    dimnames = list(
-      dimnames(ports_pop_input)[[1]], names(lifestages),
-      seed_names$port
+    dimnames = list("time_idx" = dimnames(ports_pop_input)[[1]],
+      "lifestage" = names(lifestages),
+      "port" = seed_names$port
     )
   )
 
@@ -279,6 +273,10 @@ seed_ports_fn <- function(param, seed_names, ports_pop_input, lifestages) {
   # seed ports, all the dates and lifestages
 
   afill(ports_pop_input, local = TRUE) <- seed_value
+
+  dimnames_list <- dimnames(ports_pop_input)
+  names(dimnames_list) <- c("time_idx", "lifestage", "port")
+  dimnames(ports_pop_input) <- dimnames_list
   ports_pop_input
 }
 
@@ -290,10 +288,10 @@ sourceCpp(file.path(root_dir(), "src", "stoch_pop_growth_stab.cpp"), verbose = F
 
 
 # Add a dimension for the number of life stages in the population
-
 ports_pop_temp <- ports_array_add(ports_pop_temp,
   lifestages = ship_to_port_lifestages
 )
+
 ports_pop <- seed_ports_fn(
   param = parameter_grid[param_iter, ],
   seed_names = seed_ports, ports_pop_temp,

@@ -134,20 +134,8 @@ port_to_ship_lifestages <- c(
 
 
 # Population transition matrix
-pop_transition <- matrix(data = c(
-  0.7, 0, 0, 2.4, 0.12, 0.7, 0, 0, 0, 0.08,
-  0.8, 0, 0, 0, 0.12, 0.975
-), nrow = 4, ncol = 4, byrow = TRUE)
-
-
-pop_transition <- matrix(c(0.81, 0, 0, 1.4,
-              0.224407, 0.2, 0, 0,
-              0, 0.004, 0.8, 0,
-              0, 0, 0.00092, 0.97), nrow = 4,
-            byrow = TRUE)
-
-dimnames(pop_transition)[[1]] <- dimnames(pop_transition)[[2]] <-
-  names(ship_to_port_lifestages)
+pop_transition <- readRDS(file.path(root_dir(), "data",
+  "bal_improv_pop_transition.rds"))
 
 # Reproductive and development time lag in seconds
 larval_dev_lag <- yaml_params[["params"]][["larval_dev_lag"]] # 7 days until cyprids can appear
