@@ -10,8 +10,7 @@
 param_iter <- commandArgs(trailingOnly = TRUE)
 param_iter <- as.integer((param_iter))
 
-
-param_iter <- 2
+if (interactive()) param_iter <- 2
 
 suppressMessages(TRUE)
 
@@ -47,31 +46,31 @@ log_name <- function(x) file.path(
     root_dir(), "logs",
     sprintf("parameter%03d_%s", as.numeric(param_iter[1]), x)
   )
-  
+
 get_flog_level <- function(name){
   res <- logger.options()[[paste0("logger.", name)]][["threshold"]]
   res
 }
-  
+
 
 flog.logger("ports_pop_trace", TRACE,
   appender = appender.tee(log_name("ports_pop_trace.log")))
 
 flog.logger("ports_n_trace", TRACE,
   appender = appender.tee(log_name("ports_n_trace.log")))
-  
+
 flog.logger("model_progress", INFO,
   appender = appender.console())
-  
+
 flog.logger("juve_lag", TRACE,
   appender = appender.tee(log_name("juvenile_trace.log")))
-  
+
 flog.logger("ships_pop_trace", TRACE,
   appender = appender.tee(log_name("ships_pop_trace.log")))
-  
+
 flog.logger( "ports_instant_mortality_trace", TRACE,
   appender = appender.tee(log_name("ports_instant_mortality_trace.log")))
-  
+
 flog.logger("ships_emigration_trace", TRACE,
   appender = appender.tee(log_name("ships_emigration_trace.log")))
 
@@ -106,10 +105,6 @@ repro_lag <- yaml_params[["params"]][["repro_lag"]] # McDonald et al 2009: 10 we
 port_data <- read.csv(file.path(root_dir(), "data", "port_data.csv"),
   stringsAsFactors = FALSE
 )
-
-# Define port area in square meters
-port_area <- # 312 times larger than max wsa for ships, 1546 times larger
-  # than average ship wsa
 
 # Define carrying capacity per square meter
 max_density_individuals <- yaml_params[["params"]][["max_density_individuals"]]
