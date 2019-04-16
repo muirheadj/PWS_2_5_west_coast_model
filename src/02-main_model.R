@@ -1070,27 +1070,29 @@ main_model_fn <- function(ship_imo_tbl, param_grid, A_mat, ports_pop, ...) {
       temp_ships_pop <- N_ships * ships_logit_factor -
         ship_emigration[(t_global - 1), , ] +
         ship_immigration[(t_global - 1), , ]
+        
+        
+      if (get_flog_level("ships_emigration_trace") == 9) {
+        ships_emigration_trace <- matrixStats::rowMeans2(
+          ship_emigration[(t_global - 1), , ])
 
-      ships_emigration_trace <- matrixStats::rowMeans2(
-        ship_emigration[(t_global - 1), , ]
-      )
+        names(ships_emigration_trace) <- dimnames(ships_pop)[[2]]
 
-      names(ships_emigration_trace) <- dimnames(ships_pop)[[2]]
+        flog.trace("parameter%s ships_emigration %i %f %f %f %f",
+          sprintf("%.03d", param_iter), t_global, ships_emigration_trace[1],
+          ships_emigration_trace[2], ships_emigration_trace[3],
+          ships_emigration_trace[4],
+          name = "ships_emigration_trace",
+          capture = FALSE)
+     }
 
-      flog.trace("parameter%s ships_emigration %i %f %f %f %f",
-        sprintf("%.03d", param_iter), t_global, ships_emigration_trace[1],
-        ships_emigration_trace[2], ships_emigration_trace[3],
-        ships_emigration_trace[4],
-        name = "ships_emigration_trace",
-        capture = FALSE
-      )
+     # Sanity check for negative or small population size
 
-      # Sanity check for negative or small population size
-
-      temp_ships_pop[temp_ships_pop < 2] <- 0
+     temp_ships_pop[temp_ships_pop < 2] <- 0
 
       # Round up and convert to integers
       temp_ships_pop <- ceiling(temp_ships_pop)
+      
     } else {
       # In the first time slice, so no t-1 time position
       temp_ships_pop <- ships_pop[t_global, , ]
@@ -1100,7 +1102,7 @@ main_model_fn <- function(ship_imo_tbl, param_grid, A_mat, ports_pop, ...) {
 
     fill_cube_int(ships_pop, temp_ships_pop, ships_pop_idx)
 
-				if (logger.options()$logger.ships_pop_trace$threshold == 9) {
+				if (get_flog_level("ships_pop_trace") == 9) {
 				
 				# Calculate ship populations only if the values are being logged.
 				  ships_trace_pop <- matrixStats::rowMeans2(temp_ships_pop)

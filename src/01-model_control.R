@@ -5,11 +5,13 @@
 # Author: jmuirhead
 ###############################################################################
 
-param_iter <- 2
 
 # Pass parameters to model based on arguments supplied to Rscript
 param_iter <- commandArgs(trailingOnly = TRUE)
 param_iter <- as.integer((param_iter))
+
+
+param_iter <- 2
 
 suppressMessages(TRUE)
 
@@ -294,7 +296,7 @@ source(file.path(root_dir(), "src", "02-main_model.R"))
 
 # Run main model ---------------------------------------------------------------
 
-sourceCpp(file.path(root_dir(), "src", "arma_cube.cpp"), verbose = FALSE)
+sourceCpp(file.path(root_dir(), "src", "fill_cube.cpp"), verbose = FALSE)
 
 model_run <- main_model_fn(ship_imo_tbl = ship_imo_tbl,
   param = parameter_grid[param_iter, ],
