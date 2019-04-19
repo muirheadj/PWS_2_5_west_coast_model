@@ -4,7 +4,7 @@ using namespace std;
 using namespace arma;
 //'@param population_transition A lefkovich matrix of population transition probabilities and per-capita reproduction
 //'@param population_size A vector of population size at t-1.
-//'@return Population size at time t
+//'@return Population size at time t for each lifestage.
 //'@export
 // [[Rcpp::depends(RcppArmadillo)]]
 // [[Rcpp::export]]

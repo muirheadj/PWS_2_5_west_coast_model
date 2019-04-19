@@ -57,12 +57,14 @@ balanus_fit <- function(log_gamma_3) {
                 G_1, P_2, 0, 0,
                 0, G_2, P_3, 0,
                 0, 0, G_3, P_4), nrow = 4, byrow = TRUE)
-  A
+  gammas <- c("gamma1" = gamma_1, "gamma2" = gamma_2, "gamma3" = gamma_3,
+    "gamma4" = gamma_4)
+  res = list(A = A, gammas = gammas)
 }
 
 
 gamma_min_function <- function(gamma) {
-  A_local <- balanus_fit(gamma)
+  A_local <- balanus_fit(gamma)[["A"]]
   A_local[is.nan(A_local)] <- .Machine$double.eps
 
   res <- (1.0006 - eigen.analysis(A_local)$lambda1)^2
@@ -72,7 +74,10 @@ gamma_min_function <- function(gamma) {
 res <- DEoptim(gamma_min_function, lower = -7, upper = 0,
              control = list(trace = 1))
 
-(A_new <- balanus_fit(res$optim$bestmem))
+(A_new <- balanus_fit(res$optim$bestmem)[["A"]])
+
+gammas <- balanus_fit(res$optim$bestmem)[["gammas"]]
+
 (A_eigen <- eigen.analysis(A_new))
 (fundamental.matrix(A_new))
 

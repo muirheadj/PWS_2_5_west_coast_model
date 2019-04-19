@@ -241,7 +241,7 @@ main_model_fn <- function(ship_imo_tbl, param_grid, A_mat, ports_pop, ...) {
 
   # Create directories to store results
   parameter_id <- param_grid[["parameter_id"]]
-  results_dir <- file.path(root_dir(), "results", "population_stability",
+  results_dir <- path(root_dir(), "results", "population_stability",
     parameter_id)
 
   alphabet_it <- iterators::iter(letters[1:26])
@@ -249,13 +249,13 @@ main_model_fn <- function(ship_imo_tbl, param_grid, A_mat, ports_pop, ...) {
   # Creates file directories with additional letter to avoid overwriting old
   # files
 
-  if (file.exists(results_dir)) {
+  if (file_exists(results_dir)) {
     results_dir <- paste0(
       results_dir,
       nextElem(alphabet_it)
     )
   }
-  dir.create(results_dir, recursive = TRUE)
+  dir_create(results_dir, recursive = TRUE)
 
   # Save data
   param <- list(
@@ -274,14 +274,14 @@ main_model_fn <- function(ship_imo_tbl, param_grid, A_mat, ports_pop, ...) {
     port_compentency_prob = port_compentency_prob
   )
 
-  saveRDS(param, file = file.path(results_dir, sprintf(
+  saveRDS(param, file = path(results_dir, sprintf(
     "parameters_%s%s",
     Sys.Date(), ".RData"
   )))
 
   flog.info("Parameters saved", name = "model_progress.log")
 
-  saveRDS(ports_pop, file = file.path(
+  saveRDS(ports_pop, file = path(
     results_dir,
     sprintf("ports_pop_%s%s", Sys.Date(), ".RData")
   ))

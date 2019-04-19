@@ -7,7 +7,7 @@
 
 # Pass parameters to model based on arguments supplied to Rscript
 
-param_iter <- 1
+param_iter <- 2
 
 suppressMessages(TRUE)
 
@@ -26,6 +26,7 @@ library("assertive.numbers")
 library("stringi")
 library("futile.logger")
 library("rprojroot")
+library("fs")
 
 root_crit <- has_dirname("PWS_2_5_west_coast_model", subdir = "src")
 root_dir <- root_crit$make_fix_file()
@@ -34,20 +35,19 @@ options(tibble.width = Inf)
 
 # Imput model parameters from YAML file
 
-yaml_params <- yaml::read_yaml(file.path(root_dir(), "params.yaml"))
+yaml_params <- yaml::read_yaml(path(root_dir(), "params.yaml"))
 
 # Set up tracer and info loggers
 
-log_name <- function(x) file.path(
+log_name <- function(x) path(
     root_dir(), "logs",
     sprintf("parameter%03d_%s", as.numeric(param_iter[1]), x)
   )
 
-flog.logger(
-  name = "ports_pop_trace", TRACE,
-  appender = appender.console()
-)
-
+flog.logger("stab_ports_pop_trace", TRACE,
+  appender = appender.tee(log_name("stab_ports_pop_trace.log"))
+  )
+  
 flog.logger(
   name = "model_progress", INFO,
   appender = appender.console()
@@ -60,8 +60,7 @@ flog.logger(
 )
 
 
-flog.threshold(TRACE, name = "stab_ports_pop_trace")
-flog.threshold(TRACE, name = "stab_juve_lag")
+flog.threshold(TRACE)
 
 # Identify species
 sp_name <- yaml_params[["params"]][["sp_name"]]
@@ -130,12 +129,10 @@ parameter_grid <- parameter_grid %>%
   mutate(parameter_id = sprintf("parameter%0.3d", seq(nrow(.)))) %>%
   select(parameter_id, everything())
 
-saveRDS(parameter_grid, file = file.path(
-  root_dir(), "data",
-  "parameters_df.rds"
-), compress = TRUE)
-
-
+saveRDS(parameter_grid, file = path(root_dir(), "data", "parameters_df",
+  ext = "rds"),
+  compress = TRUE)
+ 
 # Extract Ports habitat suitability as a vector --------------------------------
 
 ports_habitat_suitability <- port_data %>%
@@ -174,27 +171,26 @@ boot_iter <- yaml_params[["params"]][["boot_iter"]]
 
 scenario <- parameter_grid[param_iter, "scenario"]
 
-data_directory <- file.path(
+data_directory <- path(
   root_dir(), "data"
 )
 
 flog.info("data directory: %s", data_directory, name = "model_progress.log")
 
-ports_pop_temp <- readRDS(file.path(
+ports_pop_temp <- readRDS(path(
   data_directory, "ship_movements",
-  "ports_array.rds"
-))
+  "ports_array", ext = "rds"))
 
 
 
 # Get list of bootstrapped ship populations
-boot_filelist <- list.files(
+boot_filelist <- dir_ls(
   path = data_directory,
-  pattern = "chunk[0-9]{3}.rds$", full.names = FALSE, recursive = TRUE
+  glob = "*chunk*", recursive = TRUE
 )
 
 # Reshape some of the arrays for the population growth model
-source(file.path(root_dir(), "munge", "04-select_ship_sources_for_caribbean.R"))
+source(path(root_dir(), "munge", "04-select_ship_sources_for_caribbean.R"))
 
 # Setup invasion status (population density of organisms) of initial ports
 # (ports_array)
@@ -210,8 +206,8 @@ seed_ports_fn <- function(param, seed_names, ports_pop_input, lifestages) {
   n_at_carrying_capacity <- param[, "k_ports"]
 
   n_at_stability <- c(
-    larva =  852782219 , cyprid =  89274725,
-    juvenile = 11185729 , adult = 30359726
+    larva =  864335807 , cyprid =  88966194,
+    juvenile = 11225670 , adult = 31363907
   )
 
   seed_value <- array(
@@ -238,10 +234,10 @@ seed_ports_fn <- function(param, seed_names, ports_pop_input, lifestages) {
 }
 
 # Source c++ version of population growth
-sourceCpp(file.path(root_dir(), "src", "popgrow.cpp"), verbose = FALSE)
+sourceCpp(path(root_dir(), "src", "popgrow.cpp"), verbose = FALSE)
 
 # Source c++ version of stochastic matrix
-sourceCpp(file.path(root_dir(), "src", "stoch_pop_growth_stab.cpp"), verbose = FALSE)
+sourceCpp(path(root_dir(), "src", "stoch_pop_growth_stab.cpp"), verbose = FALSE)
 
 
 # Add a dimension for the number of life stages in the population
@@ -255,18 +251,17 @@ ports_pop <- seed_ports_fn(
   lifestages = ship_to_port_lifestages
 )
 
-source(file.path(root_dir(), "src", "02a-population_stability.R"))
+source(path(root_dir(), "munge", "02a-pop_stability_model.R"))
 
 # Run main model ---------------------------------------------------------------
 
-sourceCpp(file.path(root_dir(), "src", "arma_cube.cpp"), verbose = FALSE)
+sourceCpp(path(root_dir(), "src", "fill_cube.cpp"), verbose = FALSE)
 
 model_run <- main_model_fn(ship_imo_tbl = ship_imo_tbl,
   param = parameter_grid[param_iter, ],
   A_mat = pop_transition,
   ports_pop = ports_pop,
   root_dir(),
-  data_directory,
   param_iter,
   boot_iter
 )

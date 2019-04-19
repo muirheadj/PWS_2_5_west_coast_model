@@ -5,7 +5,6 @@
 # Author: jmuirhead
 ###############################################################################
 
-
 # Pass parameters to model based on arguments supplied to Rscript
 param_iter <- commandArgs(trailingOnly = TRUE)
 param_iter <- as.integer((param_iter))
@@ -76,10 +75,7 @@ flog.logger("ships_emigration_trace", TRACE,
 
 flog.threshold(INFO)
 
-# Identify species
-sp_name <- yaml_params[["params"]][["sp_name"]]
-
-# Set up lifestages, incl which lifestages disperse (sp = ship to port)
+# Set up lifestages, and indicate which lifestages disperse as 1.
 
 ship_to_port_lifestages <- c(
   "larva" = 1, "cyprid" = 0, "juvenile" = 0,
@@ -89,10 +85,6 @@ port_to_ship_lifestages <- c(
   "larva" = 0, "cyprid" = 1, "juvenile" = 0,
   "adult" = 0
 )
-
-# Population transition matrix
-pop_transition <- readRDS(file.path(root_dir(), "data",
-  "bal_improvisus_pop_transition.rds"))
 
 # Reproductive and development time lag in seconds
 larval_dev_lag <- yaml_params[["params"]][["larval_dev_lag"]] # 7 days until cyprids can appear
@@ -114,7 +106,7 @@ parameter_grid <- expand.grid(
   species = yaml_params[["params"]][["sp_name"]],
   scenario = yaml_params[["params"]][["scenario"]],
   port_area = yaml_params[["params"]][["port_area"]],
-  k_ports = port_area * max_density_individuals,
+  k_ports = max_density_individuals * yaml_params[["params"]][["port_area"]],
   fw_reduction = yaml_params[["params"]][["fw_reduction"]],
   max_density_individuals = max_density_individuals,
   larval_dev_lag = larval_dev_lag,
@@ -143,6 +135,12 @@ saveRDS(parameter_grid, file = file.path(
   root_dir(), "data",
   "parameters_df.rds"
 ), compress = TRUE)
+
+
+# Population transition matrix
+pop_transition <- readRDS(file.path(root_dir(), "data",
+  paste0(parameter_grid[param_iter, "species"], "_pop_transition.rds")))
+
 
 
 # Extract Ports habitat suitability as a vector --------------------------------
@@ -183,30 +181,25 @@ boot_iter <- yaml_params[["params"]][["boot_iter"]]
 
 scenario <- parameter_grid[param_iter, "scenario"]
 
-data_directory <- file.path(
-  root_dir(), "data"
-)
-
-flog.info("data directory: %s", data_directory, name = "model_progress.log")
-
 # Get ship imo info, ships_array and ports_array (population arrays)
 ship_imo_tbl <- readRDS(file.path(
-  data_directory, "ship_movements",
+  root_dir(), "data", "ship_movements",
   "ship_imo_tbl.rds"
 ))
 
 # Set the effective wsa for ships to be 10% of the wetted surface area
 effective_wsa_scale <- yaml_params[["params"]][["effective_wsa_scale"]]
 
-ship_imo_tbl[["effective_wsa"]] <- ship_imo_tbl[["wsa"]] * effective_wsa_scale
+ship_imo_tbl <- ship_imo_tbl %>%
+  mutate("effective_wsa" = wsa * effective_wsa_scale)
 
 # Pre-allocate memory for ships and ports arrays
 ships_pop_temp <- readRDS(file.path(
-  data_directory, "ship_movements",
+  root_dir(), "data", "ship_movements",
   "ships_array.rds"
 ))
 ports_pop_temp <- readRDS(file.path(
-  data_directory, "ship_movements",
+  root_dir(), "data", "ship_movements",
   "ports_array.rds"
 ))
 
@@ -273,6 +266,8 @@ sourceCpp(file.path(root_dir(), "src", "popgrow.cpp"), verbose = FALSE)
 # Source c++ version of stochastic matrix
 sourceCpp(file.path(root_dir(), "src", "stoch_pop_growth.cpp"), verbose = FALSE)
 
+# Source c++ function for infilling matrices and arrays
+sourceCpp(file.path(root_dir(), "src", "fill_cube.cpp"), verbose = FALSE)
 
 # Add a dimension for the number of life stages in the population
 ships_pop <- ships_array_add(ships_pop_temp,
@@ -290,8 +285,6 @@ ports_pop <- seed_ports_fn(
 source(file.path(root_dir(), "src", "02-main_model.R"))
 
 # Run main model ---------------------------------------------------------------
-
-sourceCpp(file.path(root_dir(), "src", "fill_cube.cpp"), verbose = FALSE)
 
 model_run <- main_model_fn(ship_imo_tbl = ship_imo_tbl,
   param = parameter_grid[param_iter, ],

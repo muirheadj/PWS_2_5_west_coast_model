@@ -7,6 +7,19 @@
 using namespace Rcpp;
 using namespace std;
 
+
+//' Generates a stochastic list of population transition matrices for each
+//' port.
+//
+//' @title Generates a stochastic list of population transition matrices for each
+//'  port.
+//' @param Aorig The baseline population transition matrix used as source to
+//'  generate random deviates.
+//' @param curtime The current time of the the model.
+//' @param ds A data.frame storing the datetimes at which each port is
+//'  freed from the effects of the time lags for each lifestage.
+//' @return A list containing random deviates for the population transition
+//'  matrix applied to ports.
 // [[Rcpp::export]]
 List port_stoch_pop(NumericMatrix Aorig, SEXP curtime, DataFrame ds){
 
@@ -80,7 +93,18 @@ List port_stoch_pop(NumericMatrix Aorig, SEXP curtime, DataFrame ds){
   return poplist;
 }
 
-
+//' Generates a stochastic list of population transition matrices for each
+//' ship.
+//
+//' @title Generates a stochastic list of population transition matrices for each
+//'  ship.
+//' @param Aorig The baseline population transition matrix used as source to
+//'  generate random deviates.
+//' @param curtime The current time of the the model.
+//' @param ds A data.frame storing the datetimes at which each ship is
+//'  freed from the effects of the time lags for each lifestage.
+//' @return A list containing random deviates for the population transition
+//'  matrix applied to ships.
 // [[Rcpp::export]]
 List ship_stoch_pop(NumericMatrix Aorig, SEXP curtime, DataFrame ds){
 

@@ -8,7 +8,7 @@ output:
 
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, message = FALSE)
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, fig.path = "figs/")
 
 library("rprojroot")
 root_crit <- has_dirname("PWS_2_5_west_coast_model", subdir = "src")
@@ -143,7 +143,7 @@ names(A_gammas) <- c("larva", "cyprid", "juvenile", "adult")
 knitr::kable(A_gammas)
 ```
 
-```{r run-model, echo = FALSE}
+```{r run-model, eval=FALSE, include=FALSE, echo=FALSE}
 source(path(root_dir(), "munge", "01-model_control_pop_stability.R"))
 
 ```
@@ -151,7 +151,7 @@ After submitting the population transition matrix to a model where there is
 no ship movement, the average population size for each lifestage in the seed
 ports is shown as:
 
-```{r plot-log, echo=FALSE}
+```{r plot-log, echo=FALSE, dev="png", dpi=400, fig.width=6}
 pop_stability_results <- readr::read_log(file.path(root_dir(), "logs",
   "parameter002_stab_ports_pop_trace.log"), col_names = FALSE)
 
