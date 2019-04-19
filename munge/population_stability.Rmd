@@ -1,0 +1,173 @@
+---
+title: "Population stability analysis for Balanus improvisus"
+date: "`r format(Sys.time(), '%Y-%m-%d')`"
+output:
+  pdf_document: default
+  word_document: default
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE)
+
+library("rprojroot")
+root_crit <- has_dirname("PWS_2_5_west_coast_model", subdir = "src")
+root_dir <- root_crit$make_fix_file()
+
+library("tidyr")
+library("dplyr")
+library("ggplot2")
+library("popbio")
+library("fs")
+
+suppressPackageStartupMessages(library("DEoptim"))
+options(scipen = -4)
+```
+
+Functions to determine proportion of overall survival that is transferred between
+classes (gamma), and the probability of surviving and staying in the same class is
+$P_i$ and the probability of surviving and transferring between classes is $G_i$
+ (From Caswell 2001).
+
+```{r}
+gamma_i <- function(sigma_i, lam, T_i){
+  res <- ((sigma_i / lam) ^ T_i - (sigma_i / lam) ^ (T_i - 1)) /
+    ((sigma_i / lam) ^ T_i - 1)
+}
+
+
+P_i <- function(p, T_i){
+  p * (1 - p ^ (T_i - 1) ) / (1 - p ^ T_i)
+}
+
+G_i <- function(p, T_i) {
+  p ^ T_i * (1 - p) / (1 - p ^ T_i)
+}
+
+```
+
+The overall survival for each stage (sigma), and the duration of each stage
+(T) in units of 6-hour timesteps.
+```{r survivalprob}
+balanus_lh <- list("larva" = list("sigma" = 0.515, "T" = 44),
+                   "cyprid" = list("sigma" = 0.94, "T" = 12),
+                   "juvenile" = list("sigma" = 0.58, "T" = 84),
+                   "adult" = list("sigma" = 0.998, "T" = 2192))
+```
+
+
+The function used to estimate the value for $\gamma_{juvenile}$ for an overall
+dominant eigenvalue of 1.0006.
+
+```{r fit-gamma}
+balanus_fit <- function(log_gamma_3) {
+  lam <- 1.0006
+
+  sigma_1 <- balanus_lh[["larva"]][["sigma"]]
+  gamma_1 <- 1/balanus_lh[["larva"]][["T"]]
+  P_1 <- sigma_1 * (1 - gamma_1)
+  G_1 <- sigma_1 * gamma_1
+
+  sigma_2 <- balanus_lh[["cyprid"]][["sigma"]]
+  gamma_2 <- gamma_i(sigma_i = sigma_2, lam = lam,
+    T_i = balanus_lh[["cyprid"]][["T"]])
+
+  P_2 <- sigma_2 * (1 - gamma_2)
+  G_2 <- sigma_2 * gamma_2
+
+  sigma_3 <- balanus_lh[["juvenile"]][["sigma"]]
+
+  gamma_3 <- exp(log_gamma_3)
+  P_3 <- sigma_3 * (1 - gamma_3)
+  G_3 <- sigma_3 * gamma_3
+
+  sigma_4 <- balanus_lh[["adult"]][["sigma"]]
+
+  gamma_4 <- gamma_i(sigma_i = sigma_4, lam = lam,
+  	T_i =  balanus_lh[["adult"]][["T"]])
+
+  P_4 <- sigma_4 * (1 - gamma_4)
+
+  F_4 <- 13.69 # 10000 eggs per season
+
+  A <- matrix(c(P_1, 0, 0, F_4,
+                G_1, P_2, 0, 0,
+                0, G_2, P_3, 0,
+                0, 0, G_3, P_4), nrow = 4, byrow = TRUE)
+  gammas <- c("gamma1" = gamma_1, "gamma2" = gamma_2, "gamma3" = gamma_3,
+    "gamma4" = gamma_4)
+  res = list(A = A, gammas = gammas)
+}
+```
+
+
+```{r estimate-juv-gamma}
+gamma_min_function <- function(gamma) {
+  A_local <- balanus_fit(gamma)[["A"]]
+  A_local[is.nan(A_local)] <- .Machine$double.eps
+
+  res <- (1.0006 - eigen.analysis(A_local)$lambda1)^2
+}
+
+```
+
+The function to minimize.
+```{r minFunction}
+
+gamma_min_function <- function(gamma) {
+  A_local <- balanus_fit(gamma)[["A"]]
+  A_local[is.nan(A_local)] <- .Machine$double.eps
+
+  res <- (1.0006 - eigen.analysis(A_local)$lambda1)^2
+}
+
+
+res <- DEoptim(gamma_min_function, lower = -7, upper = 0,
+  control = list(trace = 0))
+```
+
+The resulting population transition matrix is
+
+```{r, echo=FALSE, results='asis'}
+A_fit <- balanus_fit(res$optim$bestmem)[["A"]]
+rownames(A_fit) <- c("larva", "cyprid", "juvenile", "adult")
+colnames(A_fit) <- c("larva", "cyprid", "juvenile", "adult")
+knitr::kable(A_fit)
+```
+
+with $\gamma$ of each stage as:
+
+```{r gamma-output, echo = FALSE, results='asis'}
+A_gammas <- balanus_fit(res$optim$bestmem)[["gammas"]]
+names(A_gammas) <- c("larva", "cyprid", "juvenile", "adult")
+knitr::kable(A_gammas)
+```
+
+```{r run-model, echo = FALSE}
+source(path(root_dir(), "munge", "01-model_control_pop_stability.R"))
+
+```
+After submitting the population transition matrix to a model where there is
+no ship movement, the average population size for each lifestage in the seed
+ports is shown as:
+
+```{r plot-log, echo=FALSE}
+pop_stability_results <- readr::read_log(file.path(root_dir(), "logs",
+  "parameter002_stab_ports_pop_trace.log"), col_names = FALSE)
+
+names(pop_stability_results) <- c("log_level", "datetime", "parameter",
+  "variable", "time_idx", "larva", "cyprid", "juvenile", "adult")
+
+port_stability <- pop_stability_results %>%
+  select(time_idx, larva, cyprid, juvenile, adult) %>%
+  pivot_longer(., cols = -time_idx, names_to = "lifestage", values_to = "population") %>%
+  mutate(lifestage = factor(lifestage, levels = c("larva", "cyprid", "juvenile",
+    "adult")))
+
+ggplot(port_stability, aes(time_idx, population)) +
+  facet_wrap(~lifestage, ncol = 1, nrow = 4, scales = "free_y") +
+  geom_line() +
+  labs(x = "time index", y = "population") +
+  theme_bw()
+
+```
