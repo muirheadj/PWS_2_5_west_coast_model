@@ -2,9 +2,9 @@
 title: "Population stability analysis for Balanus improvisus"
 date: "`r format(Sys.time(), '%Y-%m-%d')`"
 output:
-  pdf_document: default
-  word_document: default
-    
+  bookdown::pdf_book:
+    keep_tex: no
+    toc: false
 ---
 
 
@@ -20,10 +20,13 @@ library("dplyr")
 library("ggplot2")
 library("popbio")
 library("fs")
+library("bookdown")
 
 suppressPackageStartupMessages(library("DEoptim"))
 options(scipen = -4)
 ```
+
+# Helper Functions 
 
 Functions to determine proportion of overall survival that is transferred between
 classes (gamma), and the probability of surviving and staying in the same class is
@@ -46,6 +49,7 @@ G_i <- function(p, T_i) {
 }
 
 ```
+# Survival probability and duration of lifestage
 
 The overall survival for each stage (sigma), and the duration of each stage
 (T) in units of 6-hour timesteps.
@@ -126,6 +130,7 @@ gamma_min_function <- function(gamma) {
 res <- DEoptim(gamma_min_function, lower = -7, upper = 0,
   control = list(trace = 0))
 ```
+# Transition matrix
 
 The resulting population transition matrix is
 
@@ -148,6 +153,8 @@ knitr::kable(A_gammas)
 source(path(root_dir(), "munge", "01-model_control_pop_stability.R"))
 
 ```
+# Test for population stability
+
 After submitting the population transition matrix to a model where there is
 no ship movement, the average population size for each lifestage in the seed
 ports is shown as:
