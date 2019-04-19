@@ -4,6 +4,7 @@ date: "`r format(Sys.time(), '%Y-%m-%d')`"
 output:
   pdf_document: default
   word_document: default
+    
 ---
 
 
@@ -152,6 +153,7 @@ no ship movement, the average population size for each lifestage in the seed
 ports is shown as:
 
 ```{r plot-log, echo=FALSE, dev="png", dpi=400, fig.width=6}
+
 pop_stability_results <- readr::read_log(file.path(root_dir(), "logs",
   "parameter002_stab_ports_pop_trace.log"), col_names = FALSE)
 
@@ -168,6 +170,6 @@ ggplot(port_stability, aes(time_idx, population)) +
   facet_wrap(~lifestage, ncol = 1, nrow = 4, scales = "free_y") +
   geom_line() +
   labs(x = "time index", y = "population") +
-  theme_bw()
+  theme_minimal(base_size = 9)
 
 ```
