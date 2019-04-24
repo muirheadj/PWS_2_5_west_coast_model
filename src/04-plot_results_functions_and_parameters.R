@@ -206,6 +206,8 @@ list_process_df_fn <- function(x){
 # The output is a data.frame where the attributes assigned to the matrix are
 # added as additional variables.
 
+		if(is.null(names(dimnames(x)))) stop( "Dimnames of the array must be named")
+		
   temp_cube <- dplyr::as.tbl_cube(x, met_name = "population")
 		temp_df <- as_tibble(temp_cube)
 
@@ -214,6 +216,7 @@ list_process_df_fn <- function(x){
   temp_df[["lifestage"]] <- factor(temp_df[["lifestage"]],
       levels = c("larva", "cyprid", "juvenile", "adult"))
   temp_df[["parameter"]] <- attr(x, "parameter")
+  temp_df[["bootstrap"]] <- attr(x, "bootstrap")
   temp_df
 }
 
@@ -228,9 +231,14 @@ process_parameters_fn <- function(x){
 }
 
 # This function processes the raw data from the ports results
+
+# FIXME
 process_ports_fn <- function(i){
 
   flog.info("Processing ports file %s", i, name = "model_progress_log")
+
+  # n_destination_ports is the number of non-seed ports
+  
 
   n_destination_ports <- readRDS(create_filelist_from_data("n_destination_ports", 1))
 

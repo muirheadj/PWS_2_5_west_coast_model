@@ -20,7 +20,7 @@ library("rprojroot")
 root_crit <- has_dirname("PWS_2_5_west_coast_model", subdir = "src")
 root_dir <- root_crit$make_fix_file()
 
-results_dir <- find_root_file("results", "population_stability", criterion = root_crit)
+results_dir <- find_root_file("results", criterion = root_crit)
 figures_dir <- find_root_file("figures", criterion = root_crit)
 data_dir <- find_root_file("data", criterion = root_crit)
 
@@ -46,7 +46,6 @@ parameters_df <- readRDS(file.path(data_dir, "parameters_df.rds"))
 parameters_df <- parameters_df %>%
   unique() %>%
   mutate(
-    fw_reduction = 1 - as.numeric(fw_reduction),
     scenario = factor(scenario)
   )  %>%
   select(parameter_id, species, scenario)
@@ -85,7 +84,7 @@ flog.info("Converting ports temp array into data.frame",
   name = "model_progress_log"
 )
 
-ports_array <- ports_temp[[1]]
+ports_array <- ports_temp[[2]]
 
 ports_base_long <- list_process_df_fn(ports_array)
 

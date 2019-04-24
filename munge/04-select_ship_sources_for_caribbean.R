@@ -22,6 +22,7 @@ ships_array_add <- function(ships_pop_input, lifestages) {
     dim = dim(ships_aperm),
     dimnames = dimnames(ships_aperm)
   )
+  names(dimnames(ships_aperm_out)) <- c("time_idx", "lifestage", "lrnoimoshipno")
   ships_aperm_out
 }
 
@@ -40,5 +41,6 @@ ports_array_add <- function(ports_pop_input, lifestages) {
     dim = dim(ports_aperm),
     dimnames = dimnames(ports_aperm)
   )
+  names(dimnames(ports_aperm_out)) <- c("time_idx", "lifestage", "port")
   ports_aperm_out
 }

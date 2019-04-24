@@ -6,8 +6,7 @@ params:
   scenario:
    - seed_ports1
    - seed_ports2
-  sp_name: 
-   - hypothetical_sp
+  sp_name:
    - bal_improvisus
   habitat_threshold:
     - hypothetical_sp: 0.0

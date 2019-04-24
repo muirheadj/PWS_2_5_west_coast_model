@@ -1134,8 +1134,9 @@ main_model_fn <- function(ship_imo_tbl, param_grid, A_mat, ports_pop, ...) {
   } # End of time processing loop
 
   # Create directories to store results
+  bootstap_dir <- sprintf("bootstrap_iter%03d", boot_iter)
   parameter_id <- param_grid[["parameter_id"]]
-  results_dir <- file.path(root_dir(), "results", parameter_id)
+  results_dir <- file.path(root_dir(), "results", bootstap_dir, parameter_id)
 
   alphabet_it <- iterators::iter(letters[1:26])
 

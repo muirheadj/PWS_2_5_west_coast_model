@@ -29,6 +29,7 @@ library("assertive.numbers")
 library("stringi")
 library("futile.logger")
 library("rprojroot")
+library("fs")
 
 root_crit <- has_dirname("PWS_2_5_west_coast_model", subdir = "src")
 root_dir <- root_crit$make_fix_file()
@@ -37,11 +38,11 @@ options(tibble.width = Inf)
 
 # Imput model parameters from YAML file
 
-yaml_params <- yaml::read_yaml(file.path(root_dir(), "params.yaml"))
+yaml_params <- yaml::read_yaml(path(root_dir(), "params.yaml"))
 
 # Set up tracer and info loggers
 
-log_name <- function(x) file.path(
+log_name <- function(x) path(
     root_dir(), "logs",
     sprintf("parameter%03d_%s", as.numeric(param_iter[1]), x)
   )
@@ -94,7 +95,7 @@ repro_lag <- yaml_params[["params"]][["repro_lag"]] # McDonald et al 2009: 10 we
 
 # Read in table of port information for seed ports and habitat suitability
 
-port_data <- read.csv(file.path(root_dir(), "data", "port_data.csv"),
+port_data <- read.csv(path(root_dir(), "data", "port_data.csv"),
   stringsAsFactors = FALSE
 )
 
@@ -126,22 +127,40 @@ habitat_threshold <- unlist(yaml_params[["params"]][["habitat_threshold"]],
 
 parameter_grid <- left_join(parameter_grid, habitat_threshold, by = "species")
 
+# Extract number of seed and destination (non-seed ports)
+# Extract seed ports and store in a vector
+
+seed_ports <- port_data %>%
+  filter(
+    species == parameter_grid[param_iter, "species"],
+    scenario == parameter_grid[param_iter, "scenario"],
+    occurrance == 1
+  ) %>%
+  select(port)
+
+
+n_ports <- port_data %>%
+	  group_by(species, scenario) %>%
+	  summarise(n_seed_ports = sum(occurrance == 1),
+	    n_destination_ports = sum(occurrance == 0))
+	
 parameter_grid <- parameter_grid %>%
-  filter(!(species == "hypothetical_sp" & scenario == "seed_ports2")) %>%
+  left_join(n_ports, by = c("species", "scenario"))  
+
+parameter_grid <- parameter_grid %>%
+  filter(species != "hypothetical_sp") %>%
   mutate(parameter_id = sprintf("parameter%0.3d", seq(nrow(.)))) %>%
   select(parameter_id, everything())
 
-saveRDS(parameter_grid, file = file.path(
+saveRDS(parameter_grid, file = path(
   root_dir(), "data",
   "parameters_df.rds"
 ), compress = TRUE)
 
 
-# Population transition matrix
-pop_transition <- readRDS(file.path(root_dir(), "data",
+# Population transition matrix ------------------------------------------------
+pop_transition <- readRDS(path(root_dir(), "data",
   paste0(parameter_grid[param_iter, "species"], "_pop_transition.rds")))
-
-
 
 # Extract Ports habitat suitability as a vector --------------------------------
 
@@ -156,16 +175,6 @@ names(ports_habitat_suitability) <- port_data %>%
   purrr::pluck("port") %>%
   unique()
 
-# Identify seed ports ---------------------------------------------------------
-
-# Extract seed ports and store in a vector
-seed_ports <- port_data %>%
-  filter(
-    species == parameter_grid[param_iter, "species"],
-    scenario == parameter_grid[param_iter, "scenario"],
-    occurrance == 1
-  ) %>%
-  select(port)
 
 # Re-assign date_list_ext
 full_date_list <- format(seq(
@@ -182,7 +191,7 @@ boot_iter <- yaml_params[["params"]][["boot_iter"]]
 scenario <- parameter_grid[param_iter, "scenario"]
 
 # Get ship imo info, ships_array and ports_array (population arrays)
-ship_imo_tbl <- readRDS(file.path(
+ship_imo_tbl <- readRDS(path(
   root_dir(), "data", "ship_movements",
   "ship_imo_tbl.rds"
 ))
@@ -194,11 +203,11 @@ ship_imo_tbl <- ship_imo_tbl %>%
   mutate("effective_wsa" = wsa * effective_wsa_scale)
 
 # Pre-allocate memory for ships and ports arrays
-ships_pop_temp <- readRDS(file.path(
+ships_pop_temp <- readRDS(path(
   root_dir(), "data", "ship_movements",
   "ships_array.rds"
 ))
-ports_pop_temp <- readRDS(file.path(
+ports_pop_temp <- readRDS(path(
   root_dir(), "data", "ship_movements",
   "ports_array.rds"
 ))
@@ -213,15 +222,14 @@ dimnames(ports_pop_temp)[["port"]] <- sort(dimnames(ports_pop_temp)[["port"]])
 dimnames(ports_instant_mortality)[["port"]] <-
   sort(dimnames(ports_instant_mortality)[["port"]])
 
-
 # Get list of bootstrapped ship populations
 boot_filelist <- list.files(
-  path = data_directory,
+  path = path(root_dir(), "data"),
   pattern = "chunk[0-9]{3}.rds$", full.names = FALSE, recursive = TRUE
 )
 
 # Reshape some of the arrays for the population growth model
-source(file.path(root_dir(), "munge", "04-select_ship_sources_for_caribbean.R"))
+source(path(root_dir(), "munge", "04-select_ship_sources_for_caribbean.R"))
 
 # Setup invasion status (population density of organisms) of initial ports
 # (ports_array)
@@ -261,13 +269,13 @@ seed_ports_fn <- function(param, seed_names, ports_pop_input, lifestages) {
 }
 
 # Source c++ version of population growth
-sourceCpp(file.path(root_dir(), "src", "popgrow.cpp"), verbose = FALSE)
+sourceCpp(path(root_dir(), "src", "popgrow.cpp"), verbose = FALSE)
 
 # Source c++ version of stochastic matrix
-sourceCpp(file.path(root_dir(), "src", "stoch_pop_growth.cpp"), verbose = FALSE)
+sourceCpp(path(root_dir(), "src", "stoch_pop_growth.cpp"), verbose = FALSE)
 
 # Source c++ function for infilling matrices and arrays
-sourceCpp(file.path(root_dir(), "src", "fill_cube.cpp"), verbose = FALSE)
+sourceCpp(path(root_dir(), "src", "fill_cube.cpp"), verbose = FALSE)
 
 # Add a dimension for the number of life stages in the population
 ships_pop <- ships_array_add(ships_pop_temp,
@@ -282,7 +290,7 @@ ports_pop <- seed_ports_fn(
   lifestages = ship_to_port_lifestages
 )
 
-source(file.path(root_dir(), "src", "02-main_model.R"))
+source(path(root_dir(), "src", "02-main_model.R"))
 
 # Run main model ---------------------------------------------------------------
 
