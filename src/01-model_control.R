@@ -279,16 +279,15 @@ sourceCpp(path(root_dir(), "src", "fill_cube.cpp"), verbose = FALSE)
 
 # Add a dimension for the number of life stages in the population
 ships_pop <- ships_array_add(ships_pop_temp,
-  lifestages = ship_to_port_lifestages
-)
+  lifestages = ship_to_port_lifestages)
+  
 ports_pop_temp <- ports_array_add(ports_pop_temp,
-  lifestages = ship_to_port_lifestages
-)
+  lifestages = ship_to_port_lifestages)
+  
 ports_pop <- seed_ports_fn(
   param = parameter_grid[param_iter, ],
   seed_names = seed_ports, ports_pop_temp,
-  lifestages = ship_to_port_lifestages
-)
+  lifestages = ship_to_port_lifestages)
 
 source(path(root_dir(), "src", "02-main_model.R"))
 
@@ -305,7 +304,6 @@ model_run <- main_model_fn(ship_imo_tbl = ship_imo_tbl,
   ship_to_port_lifestages,
   port_to_ship_lifestages,
   ports_instant_mortality,
-  ports_habitat_suitability
-)
+  ports_habitat_suitability)
 
 flog.info("Finished model run", name = "model_progress.log")

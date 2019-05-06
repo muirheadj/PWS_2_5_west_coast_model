@@ -255,7 +255,7 @@ main_model_fn <- function(ship_imo_tbl, param_grid, A_mat, ports_pop, ...) {
       nextElem(alphabet_it)
     )
   }
-  dir_create(results_dir, recursive = TRUE)
+  dir_create(results_dir, recurse = TRUE)
 
   # Save data
   param <- list(

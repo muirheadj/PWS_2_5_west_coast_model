@@ -1,10 +1,15 @@
 ---
 title: "Population stability analysis for Balanus improvisus"
 date: "`r format(Sys.time(), '%Y-%m-%d')`"
+csl: ecology.csl
+bibliography: skeleton.bib
+citation_package: biblatex
 output:
   bookdown::pdf_book:
-    keep_tex: no
+    keep_tex: yes
     toc: false
+  html_document: default
+  word_document: default
 ---
 
 
@@ -31,7 +36,7 @@ options(scipen = -4)
 Functions to determine proportion of overall survival that is transferred between
 classes (gamma), and the probability of surviving and staying in the same class is
 $P_i$ and the probability of surviving and transferring between classes is $G_i$
- (From Caswell 2001).
+ [From @caswell2001].
 
 ```{r}
 gamma_i <- function(sigma_i, lam, T_i){
@@ -149,7 +154,7 @@ names(A_gammas) <- c("larva", "cyprid", "juvenile", "adult")
 knitr::kable(A_gammas)
 ```
 
-```{r run-model, eval=FALSE, include=FALSE, echo=FALSE}
+```{r run-model, include=FALSE, eval=FALSE}
 source(path(root_dir(), "munge", "01-model_control_pop_stability.R"))
 
 ```
@@ -159,7 +164,7 @@ After submitting the population transition matrix to a model where there is
 no ship movement, the average population size for each lifestage in the seed
 ports is shown as:
 
-```{r plot-log, echo=FALSE, dev="png", dpi=400, fig.width=6}
+```{r plot-log, echo=FALSE, dev="jpeg", dpi=400, include=TRUE}
 
 pop_stability_results <- readr::read_log(file.path(root_dir(), "logs",
   "parameter002_stab_ports_pop_trace.log"), col_names = FALSE)
@@ -180,3 +185,5 @@ ggplot(port_stability, aes(time_idx, population)) +
   theme_minimal(base_size = 9)
 
 ```
+
+# References

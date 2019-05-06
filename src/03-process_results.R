@@ -15,6 +15,7 @@ library("ggalt")
 library("cowplot")
 library("stringi")
 library("rprojroot")
+library("fs")
 
 # Set up directories -----------------------------------------------------------
 root_crit <- has_dirname("PWS_2_5_west_coast_model", subdir = "src")
@@ -40,7 +41,7 @@ source(file.path(
 param_list <- create_filelist_from_results(pattern = "Parameters")
 
 # Data frame of parameters
-parameters_df <- readRDS(file.path(data_dir, "parameters_df.rds"))
+parameters_df <- readRDS(path(data_dir, "parameters_df.rds"))
 
 # Make into data.frame in join with results later on for clearer legend
 parameters_df <- parameters_df %>%
@@ -48,13 +49,11 @@ parameters_df <- parameters_df %>%
   mutate(
     scenario = factor(scenario)
   )  %>%
-  select(parameter_id, species, scenario)
-
-#save_object_to_data_dir(parameters_df, include_date = FALSE)
+  select(parameter_id, scenario, n_seed_ports, n_destination_ports)
 
 # Read in port information containing scenario info, coordinates, etc
-port_data <- readr::read_csv(file.path(data_dir, "port_data.csv"))
-
+port_data <- readr::read_csv(path(data_dir, "port_data.csv")) %>%
+  select(parameter, port, lon, lat, occurrance)
 
 # Process ports from 3-D array into data.frames
 
@@ -84,7 +83,8 @@ flog.info("Converting ports temp array into data.frame",
   name = "model_progress_log"
 )
 
-ports_array <- ports_temp[[2]]
+ports_array <- ports_temp[[1]]
+names(dimnames(ports_array)) <- c("time_idx", "lifestage", "port")
 
 ports_base_long <- list_process_df_fn(ports_array)
 
@@ -98,8 +98,8 @@ ports_base_long <- ports_base_long %>%
     seed_port = if_else(occurrance == 1, "Source port",
       "Destination port"
     )) %>%
-  select(parameter, bioregion, port, seed_port, lifestage,
-    date, time_idx, population)
+  select(parameter, port, seed_port, lifestage,
+    date, time_idx, population, n_seed_ports, n_destination_ports)
 
 save_object_to_data_dir(ports_base_long)
 flog.info("Saved ports_base_long", name = "model_progress_log")
