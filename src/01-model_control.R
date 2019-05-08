@@ -9,7 +9,7 @@
 param_iter <- commandArgs(trailingOnly = TRUE)
 param_iter <- as.integer((param_iter))
 
-if (interactive()) param_iter <- 2
+if (interactive()) param_iter <- 1
 
 suppressMessages(TRUE)
 
@@ -143,9 +143,9 @@ n_ports <- port_data %>%
 	  group_by(species, scenario) %>%
 	  summarise(n_seed_ports = sum(occurrance == 1),
 	    n_destination_ports = sum(occurrance == 0))
-	
+
 parameter_grid <- parameter_grid %>%
-  left_join(n_ports, by = c("species", "scenario"))  
+  left_join(n_ports, by = c("species", "scenario"))
 
 parameter_grid <- parameter_grid %>%
   filter(species != "hypothetical_sp") %>%
@@ -280,10 +280,10 @@ sourceCpp(path(root_dir(), "src", "fill_cube.cpp"), verbose = FALSE)
 # Add a dimension for the number of life stages in the population
 ships_pop <- ships_array_add(ships_pop_temp,
   lifestages = ship_to_port_lifestages)
-  
+
 ports_pop_temp <- ports_array_add(ports_pop_temp,
   lifestages = ship_to_port_lifestages)
-  
+
 ports_pop <- seed_ports_fn(
   param = parameter_grid[param_iter, ],
   seed_names = seed_ports, ports_pop_temp,

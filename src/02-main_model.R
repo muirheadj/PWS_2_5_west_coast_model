@@ -304,7 +304,7 @@ ship_immigration_fn <-
            ship_position = ship_position,
            t1 = t1_position_idx,
            ship_immigration_input = ship_immigration,
-           x = t_global) {
+           x = t_global, port_area = port_area) {
     if (x > 1) {
       t1_global <- x - 1
 
@@ -400,7 +400,7 @@ port_juvenile_production_fn <-
            port_emigration = port_cyprid_compentency,
            ship_position,
            t1 = t1_position_idx,
-           x = t_global) {
+           x = t_global, port_area = port_area) {
     port_juvenile_size_subset <- rep(0.0, length = dim(port_emigration)[[3]])
     names(port_juvenile_size_subset) <- dimnames(port_emigration)[[3]]
 
@@ -943,13 +943,14 @@ main_model_fn <- function(ship_imo_tbl, param_grid, A_mat, ports_pop, ...) {
 
     port_juvenile_production <- port_juvenile_production_fn(ports_pop,
       port_to_ship_lifestages, port_cyprid_compentency, ship_position,
-      t1 = t1_position_idx, x = t_global
+      t1 = t1_position_idx, x = t_global, port_area = port_area
     )
 
     # Ship immigration
     ship_immigration <- ship_immigration_fn(ships_pop, port_to_ship_lifestages,
       port_cyprid_compentency, ship_position, t1_position_idx,
-      ship_immigration_input = ship_immigration, x = t_global
+      ship_immigration_input = ship_immigration, x = t_global,
+      port_area = port_area
     )
 
     # Calculate population change in ports (ports_pop[date, lifestage, port])
@@ -1013,7 +1014,7 @@ main_model_fn <- function(ship_imo_tbl, param_grid, A_mat, ports_pop, ...) {
     ports_pop_idx <- cube_match_fn(t_date_global, ports_pop, temp_ports_pop)
 
     fill_cube_dbl(ports_pop, temp_ports_pop, ports_pop_idx)
-    
+
     ports_trace_pop <-
       rowMeans(temp_ports_pop[, dimnames(temp_ports_pop)[[2]] %nin% seed_ports])
 
@@ -1070,8 +1071,8 @@ main_model_fn <- function(ship_imo_tbl, param_grid, A_mat, ports_pop, ...) {
       temp_ships_pop <- N_ships * ships_logit_factor -
         ship_emigration[(t_global - 1), , ] +
         ship_immigration[(t_global - 1), , ]
-        
-        
+
+
       if (get_flog_level("ships_emigration_trace") == 9) {
         ships_emigration_trace <- matrixStats::rowMeans2(
           ship_emigration[(t_global - 1), , ])
@@ -1092,7 +1093,7 @@ main_model_fn <- function(ship_imo_tbl, param_grid, A_mat, ports_pop, ...) {
 
       # Round up and convert to integers
       temp_ships_pop <- ceiling(temp_ships_pop)
-      
+
     } else {
       # In the first time slice, so no t-1 time position
       temp_ships_pop <- ships_pop[t_global, , ]
@@ -1103,12 +1104,12 @@ main_model_fn <- function(ship_imo_tbl, param_grid, A_mat, ports_pop, ...) {
     fill_cube_int(ships_pop, temp_ships_pop, ships_pop_idx)
 
 				if (get_flog_level("ships_pop_trace") == 9) {
-				
+
 				# Calculate ship populations only if the values are being logged.
 				  ships_trace_pop <- matrixStats::rowMeans2(temp_ships_pop)
-				  
+
 				  names(ships_trace_pop) <- dimnames(temp_ships_pop)[[1]]
-				  
+
 				  flog.trace("parameter%s ships_population %i %f %f %f %f",
 				    sprintf("%.03d", param_iter),
 				    t_global,
@@ -1118,9 +1119,9 @@ main_model_fn <- function(ship_imo_tbl, param_grid, A_mat, ports_pop, ...) {
         ships_trace_pop[4],
         name = "ships_pop_trace",
         capture = FALSE)
-        
+
       # Check to see if ship adult pop size is 0, but ports still get invaded
-        
+
       if ((ports_trace_pop[["larva"]] > 0) &
         identical(ships_trace_pop[["adult"]], 0)) {
           stop("Something went wrong")
