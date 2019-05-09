@@ -15,7 +15,6 @@ library("futile.logger")
 library("rprojroot")
 library("keyring")
 library("mice")
-library("jmhelpers")
 library("yaml")
 
 root_crit <- has_dirname("PWS_2_5_west_coast_model", subdir = "src")
@@ -42,6 +41,34 @@ options(tibble.width = Inf) # Print all columns
 
 # Custom functions
 table <- function(x) base::table(x, useNA = "always")
+
+chunkr <-
+  function(vec,
+           chunk_size = NULL,
+           n_chunks = NULL,
+           use_bit_package = FALSE) {
+    # Check if bit package is installed
+    if (!requireNamespace("bit", quietly = TRUE)) {
+      stop("Package bit needed for this function to work. Please install it.",
+           call. = FALSE)
+    }
+
+    if (is.null(chunk_size) & is.null(n_chunks)) {
+      stop("You must provide either the size of the chunks, or number of desired chunks")
+    }
+    if (is.null(chunk_size))
+      chunk <- split(vec, cut(seq_along(vec), n_chunks, labels = FALSE))
+    if (is.null(n_chunks))
+      chunk <- split(vec, ceiling(seq_along(vec) / chunk_size))
+    if (use_bit_package == TRUE)
+      chunk <- bit::chunk(
+        from = 1,
+        to = length(vec),
+        by = chunk_size,
+        length.out = n_chunks
+      )
+    chunk
+  }
 
 # Set up logging
 flog.appender(appender.console(), name = "info.log")

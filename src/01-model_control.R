@@ -9,17 +9,14 @@
 param_iter <- commandArgs(trailingOnly = TRUE)
 param_iter <- as.integer((param_iter))
 
-if (interactive()) param_iter <- 1
-
 suppressMessages(TRUE)
 
 library("methods")
 library("utils")
-library("reshape2")
 library("data.table")
-library("lazyeval")
+library("reshape2")
+library("tidyr")
 library("dplyr")
-library("ggplot2")
 library("abind")
 library("bit")
 library("Rcpp")
@@ -30,6 +27,7 @@ library("stringi")
 library("futile.logger")
 library("rprojroot")
 library("fs")
+library("matrixStats")
 
 root_crit <- has_dirname("PWS_2_5_west_coast_model", subdir = "src")
 root_dir <- root_crit$make_fix_file()
@@ -54,25 +52,25 @@ get_flog_level <- function(name){
 
 
 flog.logger("ports_pop_trace", TRACE,
-  appender = appender.tee(log_name("ports_pop_trace.log")))
+  appender = appender.file(log_name("ports_pop_trace.log")))
 
 flog.logger("ports_n_trace", TRACE,
-  appender = appender.tee(log_name("ports_n_trace.log")))
+  appender = appender.file(log_name("ports_n_trace.log")))
 
 flog.logger("model_progress", INFO,
   appender = appender.console())
 
 flog.logger("juve_lag", TRACE,
-  appender = appender.tee(log_name("juvenile_trace.log")))
+  appender = appender.file(log_name("juvenile_trace.log")))
 
 flog.logger("ships_pop_trace", TRACE,
-  appender = appender.tee(log_name("ships_pop_trace.log")))
+  appender = appender.file(log_name("ships_pop_trace.log")))
 
 flog.logger( "ports_instant_mortality_trace", TRACE,
-  appender = appender.tee(log_name("ports_instant_mortality_trace.log")))
+  appender = appender.file(log_name("ports_instant_mortality_trace.log")))
 
 flog.logger("ships_emigration_trace", TRACE,
-  appender = appender.tee(log_name("ships_emigration_trace.log")))
+  appender = appender.file(log_name("ships_emigration_trace.log")))
 
 flog.threshold(INFO)
 
