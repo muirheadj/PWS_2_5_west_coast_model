@@ -537,19 +537,19 @@ ship_immigration <- array(0L,
 )
 
 # MAIN MODEL BEGINS #-----------------------------------------------------------
-main_model_fn <- function(ship_imo_tbl, param_grid, A_mat, ports_pop, ...) {
+main_model_fn <- function(ship_imo_tbl, param, A_mat, ports_pop, ...) {
 
-  habitat_threshold <- param_grid[["habitat_threshold"]]
-  port_area <- param_grid[["port_area"]]
-  k_ports <- param_grid[["k_ports"]]
-  max_density_individuals <- param_grid[["max_density_individuals"]]
-  larval_dev_lag <- param_grid[["larval_dev_lag"]]
-  juvenile_lag <- param_grid[["juvenile_lag"]]
-  mature_lag <- param_grid[["mature_lag"]]
-  repro_lag <- param_grid[["repro_lag"]]
-  fw_reduction <- param_grid[["fw_reduction"]]
-  ship_port_prob <- param_grid[["ship_port_prob"]]
-  port_compentency_prob <- param_grid[["port_compentency_prob"]]
+  habitat_threshold <- param[["habitat_threshold"]]
+  port_area <- param[["port_area"]]
+  k_ports <- param[["k_ports"]]
+  max_density_individuals <- param[["max_density_individuals"]]
+  larval_dev_lag <- param[["larval_dev_lag"]]
+  juvenile_lag <- param[["juvenile_lag"]]
+  mature_lag <- param[["mature_lag"]]
+  repro_lag <- param[["repro_lag"]]
+  fw_reduction <- param[["fw_reduction"]]
+  ship_port_prob <- param[["ship_port_prob"]]
+  port_compentency_prob <- param[["port_compentency_prob"]]
 
   # Get sequence of datetimes in POSIXct format
   dateseq <- as.POSIXct(dimnames(ports_pop)[[1]], tz = "UTC")
@@ -835,12 +835,12 @@ main_model_fn <- function(ship_imo_tbl, param_grid, A_mat, ports_pop, ...) {
     }
 
     if (t_chunk != current_chunk) {
-      chunk_1 <- readRDS(file.path(
+      chunk_1 <- readRDS(path(
         root_dir(), "data",
         "ship_movements",
         sprintf("position_array_chunk%0.3d%s", chunk_load1, ".rds")
       ))
-      chunk_2 <- readRDS(file.path(
+      chunk_2 <- readRDS(path(
         root_dir(), "data",
         "ship_movements",
         sprintf("position_array_chunk%0.3d%s", chunk_load2, ".rds")
@@ -1136,8 +1136,8 @@ main_model_fn <- function(ship_imo_tbl, param_grid, A_mat, ports_pop, ...) {
 
   # Create directories to store results
   bootstap_dir <- sprintf("bootstrap_iter%03d", boot_iter)
-  parameter_id <- param_grid[["parameter_id"]]
-  results_dir <- file.path(root_dir(), "results", bootstap_dir, parameter_id)
+  parameter_id <- param[["parameter_id"]]
+  results_dir <- path(root_dir(), "results", bootstap_dir, parameter_id)
 
   alphabet_it <- iterators::iter(letters[1:26])
 
@@ -1150,13 +1150,13 @@ main_model_fn <- function(ship_imo_tbl, param_grid, A_mat, ports_pop, ...) {
       nextElem(alphabet_it)
     )
   }
-  dir.create(results_dir, recursive = TRUE)
+  dir_create(results_dir, recurse = TRUE)
 
   # Save data
   param <- list(
     parameter = parameter_id,
-    species = param_grid[["species"]],
-    seed_ports = param_grid[["seed_ports"]],
+    species = param[["species"]],
+    seed_ports = param[["seed_ports"]],
     habitat_threshold = habitat_threshold,
     port_area = port_area,
     k_ports = k_ports,
@@ -1169,54 +1169,54 @@ main_model_fn <- function(ship_imo_tbl, param_grid, A_mat, ports_pop, ...) {
     port_compentency_prob = port_compentency_prob
   )
 
-  saveRDS(param, file = file.path(results_dir, sprintf(
+  saveRDS(param, file = path(results_dir, sprintf(
     "parameters_%s%s",
     Sys.Date(), ".RData"
   )))
 
   flog.info("Parameters saved", name = "model_progress.log")
 
-  saveRDS(ports_pop, file = file.path(
+  saveRDS(ports_pop, file = path(
     results_dir,
     sprintf("ports_pop_%s%s", Sys.Date(), ".RData")
   ))
 
   flog.info("ports_pop saved", name = "model_progress.log")
 
-  saveRDS(ships_pop, file = file.path(
+  saveRDS(ships_pop, file = path(
     results_dir,
     sprintf("ships_pop_%s%s", Sys.Date(), ".RData")
   ))
 
   flog.info("ships_pop saved", name = "model_progress.log")
 
-  saveRDS(port_cyprid_compentency, file = file.path(
+  saveRDS(port_cyprid_compentency, file = path(
     results_dir,
     sprintf("port_cyprid_compentency_%s%s", Sys.Date(), ".RData")
   ))
 
   flog.info("port_emigration saved", name = "model_progress.log")
 
-  saveRDS(port_immigration, file = file.path(
+  saveRDS(port_immigration, file = path(
     results_dir,
     sprintf("port_immigration_%s%s", Sys.Date(), ".RData")
   ))
 
   flog.info("port_immigration saved", name = "model_progress.log")
 
-  saveRDS(ship_emigration, file = file.path(
+  saveRDS(ship_emigration, file = path(
     results_dir,
     sprintf("ship_emigration_%s%s", Sys.Date(), ".RData")
   ))
 
   flog.info("ship_emigration saved", name = "model_progress.log")
 
-  saveRDS(ship_immigration, file = file.path(
+  saveRDS(ship_immigration, file = path(
     results_dir,
     sprintf("ship_immigration_%s%s", Sys.Date(), ".RData")
   ))
 
-  saveRDS(ports_instant_mortality, file = file.path(
+  saveRDS(ports_instant_mortality, file = path(
     results_dir,
     sprintf("ports_instant_mortality_%s%s", Sys.Date(), ".RData")
   ))

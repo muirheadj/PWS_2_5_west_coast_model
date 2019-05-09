@@ -15,9 +15,7 @@ shinyUI(fillPage(
       h3("Mean non-seed ports population size"),
        plotOutput(outputId = "port_pop_Plot", height = "250px"),
       h3("Non-seed ports number of invaded ports"),
-      plotOutput(outputId = "port_n_Plot", height = "250px"),
-       h3("Mean ships population size"),
-       plotOutput(outputId = "shipPlot", height = "250px")
+      plotOutput(outputId = "port_n_Plot", height = "250px")
     )
   )
 ))
