@@ -205,7 +205,7 @@ if (!file.exists(ports_destfile)) {
   readr::write_csv(port_data, file.path(root_dir(), "data", "port_data.csv"))
 }
 
-saveRDS(port_data, file.path(root_dir(), "data", "port_data.rds"))
+saveRDS(port_data, file.path(root_dir(), "data", "port_data.rds"), version = 2)
 
 
 # ship movement ---------------------------------------------------------------
@@ -496,17 +496,17 @@ ports_array <- matrix(
 saveRDS(ship_imo_tbl, file = file.path(
   root_dir(), "data", scenario,
   "ship_imo_tbl.rds"
-), compress = TRUE)
+), compress = TRUE, version = 2)
 
 saveRDS(ships_array, file = file.path(
   root_dir(), "data", scenario,
   "ships_array.rds"
-), compress = TRUE)
+), compress = TRUE, version = 2)
 
 saveRDS(ports_array, file = file.path(
   root_dir(), "data", scenario,
   "ports_array.rds"
-), compress = TRUE)
+), compress = TRUE, version = 2)
 
 rm(ship_imo_tbl, ships_array, ports_array)
 
@@ -619,7 +619,7 @@ for (k in seq_along(datetimes_split)) {
     root_dir(), "data",
     scenario,
     sprintf("position_array_chunk%0.3d.rds", k)
-  ), compress = TRUE)
+  ), compress = TRUE, version = 2)
 
   flog.info("Iteration: %i out of %i", k, length(datetimes_split),
     name = "info.log"
