@@ -27,11 +27,12 @@ source_region <- "foo" # Since foo will not be found, run all source_regions
 full_sample_datespan <- seq(13149)
 
 # Define color palettes
-custom_cols <- c("#7D0112FF", "#A14C26FF", "#C17F45FF", "#DAAE6DFF",
-  "#EBD79CFF", "#440154FF", "#414487FF", "#2A788EFF", "#22A884FF", "#7AD151FF")
+custom_cols <- c("#440154FF", "#7AD151FF")
 
 # Print out of color palette
-cols_sample <- tibble(custom_cols, barlength = 1)
+cols_sample <- tibble(custom_cols, x = 1:2, y = 1)
+
+
 
 # Define max image width
 col_1_wide <- 8.7 # in cm
@@ -42,6 +43,32 @@ fig_max_height <- 22 # cm
 
 
 # General helper functions ------------------------------------------------------
+
+chunkr <- function(vec, chunk_size = NULL, n_chunks = NULL,
+  use_bit_package = FALSE) {
+    # Check if bit package is installed
+    if (!requireNamespace("bit", quietly = TRUE)) {
+      stop("Package bit needed for this function to work. Please install it.",
+           call. = FALSE)
+    }
+
+    if (is.null(chunk_size) & is.null(n_chunks)) {
+      stop("You must provide either the size of the chunks, or number of desired chunks")
+    }
+    if (is.null(chunk_size))
+      chunk <- split(vec, cut(seq_along(vec), n_chunks, labels = FALSE))
+    if (is.null(n_chunks))
+      chunk <- split(vec, ceiling(seq_along(vec) / chunk_size))
+    if (use_bit_package == TRUE)
+      chunk <- bit::chunk(
+        from = 1,
+        to = length(vec),
+        by = chunk_size,
+        length.out = n_chunks
+      )
+    chunk
+  }
+
 
 '%nin%' <- Negate('%in%')
 
@@ -232,63 +259,54 @@ process_parameters_fn <- function(x){
 
 # This function processes the raw data from the ports results
 
-# FIXME
+
 process_ports_fn <- function(i){
-
-  flog.info("Processing ports file %s", i, name = "model_progress_log")
-
-  # n_destination_ports is the number of non-seed ports
-  
-
-  n_destination_ports <- readRDS(create_filelist_from_data("n_destination_ports", 1))
-
-  flog.info("Started reading ports_temp", name = "model_progress_log")
-
-  ports_temp_subset <- readRDS(file.path(data_dir, "ports_temp.rds"))[[i]]
-
-  flog.info("Finished reading ports_temp", name = "model_progress_log")
-
+	
+		ports_temp <- purrr::map(ports_list[i], process_array_fn, full_sample_datespan)[[1]]
+		
   # Note: as.Date assumes that the TZ is "UTC"
-  ports_longformat_with_coords <- list_process_df_fn(ports_temp_subset) %>%
-    left_join(port_data, by = c("location" = "port")) %>%
-    left_join(parameters_df, by = "parameter") %>%
-    mutate(date = as.Date(time),
-      seed_port = if_else(reg_lrggeo == seed_bioregion, "source port",
+  ports_longformat_with_coords <- list_process_df_fn(ports_temp) %>%
+    left_join(port_data, by = c("port", "parameter")) %>%
+    left_join(parameters_df, by = c("parameter" = "parameter_id")) %>%
+    mutate(date = as.Date(time_idx),
+      seed_port = if_else(occurrance == 1, "source port",
         "non-source port")) %>%
-    select(bootstrap, parameter, bioregion, location,
-      port_country, lat, lon, seed_port,
-      lifestage, date, date_and_time,
-      population) %>%
+    select(bootstrap, parameter, port, lat, lon, seed_port,
+      lifestage, date, time_idx, scenario, n_seed_ports, population) %>%
     as_tibble() %>%
     ungroup()
 
-  param <- ports_longformat_with_coords %>%
-    ungroup() %>%
-    select(parameter, bootstrap) %>%
-    unique() %>%
-    unlist()
+# Get number of destination ports excluding seed ports for the scenario
+  n_destination_ports <- ports_longformat_with_coords %>%
+    select(port, n_seed_ports) %>%
+    summarize(n_ports = n_distinct(port),
+      n_seed_ports = n_distinct(n_seed_ports)) %>%
+      mutate(n_destination_ports = n_ports - n_seed_ports) %>%
+      purrr::pluck("n_destination_ports")
 
-  param_label <- sprintf("%s_%s", param[[1]], param[[2]])
-
-  rm(ports_temp_subset)
 
 # Get source ports in order to exclude them from summary
 
-# Calculate mean daily population size for seed ports. Include
+# Calculate mean daily population size for non-seed ports. Include
 # ports with 0 population.
 
   destination_ports_daily_mean <- ports_longformat_with_coords %>%
-    filter(seed_port == "non-source port",
-      bioregion %in% seed_bioregions) %>%
-    group_by(date, parameter, bootstrap, lifestage, location, port_country,
-      bioregion, lat, lon) %>%
-    summarize(mean_population = mean(population),
-      log10population = log10p(mean(population))) %>%
+    filter(seed_port == "non-source port") %>%
+    group_by(date, parameter, scenario, bootstrap, lifestage, port, lat, lon) %>%
+    summarize(mean_population = mean(population)) %>%
     ungroup()
+    
+# Set param label
+	param <- destination_ports_daily_mean %>%
+	  select(bootstrap, parameter) %>%
+	  unique() %>%
+	  unlist()
 
+	param_label <- sprintf("%s_%s", param[[1]], param[[2]])
+	
 # Save daily values for each port
   saveRDS(destination_ports_daily_mean,
-    file = save_results_filename("destination_ports_daily_mean_", param_label))
+    file = save_results_filename("destination_ports_daily_mean_", param = param_label))
 
 # Calculate summary statistics for all ports, including those with 0 population
   all_ports_mean <- destination_ports_daily_mean %>%
@@ -325,6 +343,10 @@ process_ports_fn <- function(i){
 
   flog.info("Saving invaded ports mean population", name = "model_progress_log")
 
+  saveRDS(invaded_ports_mean,
+    file = save_results_filename("invaded_ports_mean_", param_label))
+
+
   rm(all_ports_mean, invaded_ports_mean)
 
 # Calculate number and proportion of invaded ports
@@ -332,8 +354,8 @@ process_ports_fn <- function(i){
   invaded_ports_count <- destination_ports_daily_mean %>%
     filter(mean_population > 0) %>%
     group_by(date, parameter, bootstrap, lifestage) %>%
-    summarize(n_destination_ports, n_invaded_ports = n_distinct(location),
-      ports_proportion = n_distinct(location) / n_destination_ports) %>%
+    summarize(n_destination_ports, n_invaded_ports = n_distinct(port),
+      ports_proportion = n_distinct(port) / n_destination_ports) %>%
     ungroup()
 
   saveRDS(invaded_ports_count,
@@ -342,8 +364,8 @@ process_ports_fn <- function(i){
   invaded_ports_pooled_lifestages_count <- destination_ports_daily_mean %>%
     filter(mean_population > 0) %>%
     group_by(date, parameter, bootstrap) %>%
-    summarize(n_destination_ports, n_invaded_ports = n_distinct(location),
-      ports_proportion = n_distinct(location) / n_destination_ports) %>%
+    summarize(n_destination_ports, n_invaded_ports = n_distinct(port),
+      ports_proportion = n_distinct(port) / n_destination_ports) %>%
     ungroup()
 
   saveRDS(invaded_ports_pooled_lifestages_count,
@@ -372,33 +394,28 @@ process_port_immigration_fn <- function(i) {
 
   ports_immigration_with_coords <-
     list_process_df_fn(port_immigration_subset) %>%
-    left_join(port_data, by = c("Location" = "PortStd")) %>%
-    left_join(parameters_df, by = "parameter") %>%
-    mutate(date = as.Date(Time), seed_port =
-      if_else(bioregion == seed_bioregion,
-        "Source port", "Caribbean port")) %>%
-    select(bootstrap, parameter, bioregion, location = Location,
-      port_country = Port_Country, lat, lon, seed_port,
-      lifestage = Lifestage, date, date_and_time = Time,
-      population = Population) %>%
+    left_join(port_data, by = c("port", "parameter")) %>%
+    left_join(parameters_df, by = c("parameter" = "parameter_id")) %>%
+    mutate(date = as.Date(time_idx),
+      seed_port = if_else(occurrance == 1, "source port",
+        "non-source port")) %>%
+    select(bootstrap, parameter, port, lat, lon, seed_port,
+      lifestage, date, time_idx, scenario, n_seed_ports, population) %>%
     as_tibble() %>%
     ungroup()
 
+
   rm(port_immigration_subset)
 
-  # Calculate population size. Note: Exclude Panama Canal from immigration
-  # calculations
+  # Calculate population size in non-seed ports.
+  
   port_immigration_daily_mean <- ports_immigration_with_coords %>%
-    filter(seed_port == "Caribbean port", bioregion %in% seed_bioregions,
-      location != "Panama Canal") %>%
-    group_by(date, parameter, bootstrap, lifestage, location, port_country,
-      bioregion, lat, lon) %>%
-    summarize(mean_population = mean(population, na.rm = TRUE),
-      log10population = log10p(mean(population, na.rm = TRUE))) %>%
+    filter(seed_port == "non-source port") %>%
+    group_by(date, parameter, bootstrap, lifestage, port, lat, lon) %>%
+    summarize(mean_population = mean(population, na.rm = TRUE)) %>%
     ungroup()
 
   param <- port_immigration_daily_mean %>%
-    ungroup() %>%
     select(parameter, bootstrap) %>%
     unique() %>%
     unlist()
@@ -463,42 +480,40 @@ melt_ships_temp <- function(ships_temp){
       name = "model_progress_log")
 
   ships_longformat <- list_process_df_fn(ships_temp) %>%
-    as_tibble() %>%
-    mutate(date = as.Date(Time)) %>%
-    select(bootstrap, parameter, location = Location,
-      lifestage = Lifestage, date, date_and_time = Time,
-      population = Population) %>%
+    mutate(date = as.Date(time_idx)) %>%
+    select(bootstrap, parameter, lrnoimoshipno,
+      lifestage, date, time_idx, population) %>%
     ungroup()
-
-  param_label <- sprintf("%s_%s", attr(ships_temp, "parameter"),
-    attr(ships_temp, "bootstrap"))
-
-  saveRDS(ships_longformat,
-    file = save_results_filename("ships_longformat_",
-      param = param_label))
 }
 
-process_ships_fn <- function() {
+chunk_array <- function(x) {
+
+# This function takes in the ships_temp array and returns a slice of it
+# based on the row ids contained in the chunk x.
+
+  res <- ships_temp[x, , , drop = FALSE]
+    attr(res, "parameter") <- attr(ships_temp, "parameter")
+    attr(res, "bootstrap") <- attr(ships_temp, "bootstrap")
+    res
+}
+
+process_ships_fn <- function(ships_longformat, chunk_number) {
 # This function processes the raw results for ships. It melts the data into
 # long-format, calculates summary statistics, and then saves the summary
 # statistics for later use.
 # Input: a number describing the sequence of parameters to be processed.
 # Output: Saved data.frames of processed ship results
 
-  flog.info("Processing ships parameter %i", i,
+  flog.info("Processing ships parameter %i, chunk %i", i, chunk_number,
     name = "model_progress_log")
 
   invaded_ships_daily_mean <- ships_longformat %>%
-    group_by(date, parameter, bootstrap, lifestage, location) %>%
+    group_by(date, parameter, bootstrap, lifestage, lrnoimoshipno) %>%
     summarize(mean_population = mean(population)) %>%
     ungroup()
 
-    rm(ships_longformat)
-    gc()
-
-
   n_all_ships <- invaded_ships_daily_mean %>%
-    summarise(n = n_distinct(location)) %>%
+    summarise(n = n_distinct(lrnoimoshipno)) %>%
     unlist()
 
   all_ships_mean <- invaded_ships_daily_mean %>%
@@ -514,8 +529,10 @@ process_ships_fn <- function() {
     select(parameter, bootstrap) %>%
     unique() %>%
     unlist()
+    
+  chunk_label <- sprintf("chunk%03d", chunk_number)
 
-  param_label <- sprintf("%s_%s", param[[1]], param[[2]])
+  param_label <- sprintf("%s_%s_%s", param[[1]], param[[2]], chunk_label)
 
   saveRDS(all_ships_mean,
     file = save_results_filename("all_ships_mean_", param_label))
@@ -535,8 +552,8 @@ process_ships_fn <- function() {
       ships_sd = sd(mean_population),
       ships_se = sd(mean_population) / n())
 
-  saveRDS(invaded_ships_mean,
-    file = save_results_filename("invaded_ships_mean_", param_label))
+ saveRDS(invaded_ships_mean,
+   file = save_results_filename("invaded_ships_mean_", param_label))
 
   flog.info("Saving invaded ships mean population",
     name = "model_progress_log")
@@ -546,23 +563,22 @@ process_ships_fn <- function() {
   invaded_ships_count <- invaded_ships_daily_mean %>%
     filter(mean_population > 0) %>%
     group_by(date, parameter, bootstrap, lifestage) %>%
-    summarize(n_invaded_ships = n_distinct(location),
+    summarize(n_invaded_ships = n_distinct(lrnoimoshipno),
       ships_proportion = n_invaded_ships / n_all_ships) %>%
     ungroup()
-
-  saveRDS(invaded_ships_count,
-    file = save_results_filename("invaded_ships_count_", param_label))
+    
+    saveRDS(invaded_ships_count,
+      file = save_results_filename("invaded_ships_count_", param_label))
 
   invaded_ships_lifestages_pooled_count <- invaded_ships_daily_mean %>%
     filter(mean_population > 0) %>%
     group_by(date, parameter, bootstrap) %>%
-    summarize(n_invaded_ships = n_distinct(location),
+    summarize(n_invaded_ships = n_distinct(lrnoimoshipno),
       ships_proportion = n_invaded_ships / n_all_ships) %>%
     ungroup()
-
+    
   saveRDS(invaded_ships_lifestages_pooled_count,
-    file = save_results_filename("invaded_ships_pooled_count_",
-      param_label))
+    file = save_results_filename("invaded_ships_pooled_count_", param_label))
 
   flog.info("Saving number of invaded ships",
     name = "model_progress_log")
@@ -577,7 +593,7 @@ graph_data_preprocessing <- function(file_pattern){
 
   temp_list <- create_filelist_from_results(pattern = file_pattern)
   temp_df <- purrr::map_dfr(temp_list, readRDS) %>%
-    left_join(parameters_df, by = "parameter") %>%
+    left_join(parameters_df, by = c("parameter" = "parameter_id")) %>%
     ungroup()
   # Fix data types
   temp_df[["date"]] <- as.Date(temp_df[["date"]])
@@ -587,6 +603,8 @@ graph_data_preprocessing <- function(file_pattern){
 
 # Sources of mortality ---------------------------------------------------------
 
+
+# FIXME
 port_mortality_summary_fn <- function(i, ports_instant_mortality_list){
 
   # This function calculates the number and proportion of successful and failed
@@ -604,8 +622,10 @@ port_mortality_summary_fn <- function(i, ports_instant_mortality_list){
     fixed = TRUE)
   ports_instant_mortality_list_sub <- ports_instant_mortality_list[idx]
 
-  ports_instant_mortality_df_sub <- map_dfr(ports_instant_mortality_list_sub,
-      readRDS) %>%
+
+browser()
+
+  ports_instant_mortality_df_sub <- readRDS(ports_instant_mortality_list_sub) %>%
     mutate(seed_source = ifelse(seed_bioregion == "NEA-II", "Atl", "Pac")) %>%
     mutate(seed_source = factor(seed_source, levels = c("Pac", "Atl")),
     `Source; FW reduction` = factor(interaction(seed_source,
