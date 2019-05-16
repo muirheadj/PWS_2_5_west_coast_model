@@ -142,12 +142,6 @@ port_cyprid_compentency_fn <-
       p_emigration_competent_proportion <- p_emigration_competent_proportion *
         ((t1_date_global >= port_lifehistory_input[["juvenile_time"]]) + 0)
 
-      flog.trace("Juvenile time lag logic",
-        table(((t1_date_global >=
-          port_lifehistory_input[["juvenile_time"]]) + 0)),
-        name = "juve_lag_log", capture = TRUE
-      )
-
       # Number of compentent cyprids that are available to immigrate to the ships
 
       p_emigration_mat <- ceiling(outer(
@@ -228,7 +222,7 @@ port_immigration_fn <-
         )
 
         # Add stochastic establishment for larva
-        prob_establishment <- 1 - exp(-1e-5 * port_immigration_total[1, ])
+        prob_establishment <- 1 - exp(-1e-3 * port_immigration_total[1, ])
 
         p_random_inst_mort <- runif(
           n = length(prob_establishment), min = 0,
@@ -359,7 +353,7 @@ ship_immigration_fn <-
 
 
         # Add stochastic establishment for juveniles
-        prob_establishment <- 1 - exp(-1e-5 *
+        prob_establishment <- 1 - exp(-1e-3 *
           port_to_ship_migration_size[["juvenile"]])
         p_random <- runif(n = length(prob_establishment), min = 0, max = 1)
 
@@ -1103,18 +1097,18 @@ main_model_fn <- function(ship_imo_tbl, param, A_mat, ports_pop, ...) {
 
     fill_cube_int(ships_pop, temp_ships_pop, ships_pop_idx)
 
-				if (get_flog_level("ships_pop_trace") == 9) {
+        if (get_flog_level("ships_pop_trace") == 9) {
 
-				# Calculate ship populations only if the values are being logged.
-				  ships_trace_pop <- matrixStats::rowMeans2(temp_ships_pop)
+        # Calculate ship populations only if the values are being logged.
+          ships_trace_pop <- matrixStats::rowMeans2(temp_ships_pop)
 
-				  names(ships_trace_pop) <- dimnames(temp_ships_pop)[[1]]
+          names(ships_trace_pop) <- dimnames(temp_ships_pop)[[1]]
 
-				  flog.trace("parameter%s ships_population %i %f %f %f %f",
-				    sprintf("%.03d", param_iter),
-				    t_global,
-				    ships_trace_pop[1],
-				    ships_trace_pop[2],
+          flog.trace("parameter%s ships_population %i %f %f %f %f",
+            sprintf("%.03d", param_iter),
+            t_global,
+            ships_trace_pop[1],
+            ships_trace_pop[2],
         ships_trace_pop[3],
         ships_trace_pop[4],
         name = "ships_pop_trace",
