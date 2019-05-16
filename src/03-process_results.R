@@ -60,8 +60,6 @@ port_data <- readr::read_csv(path(data_dir, "port_data.csv")) %>%
 flog.info("Processing ports info", name = "model_progress_log")
 
 ports_list <- create_filelist_from_results(pattern = "ports_pop")
-#ports_temp <- purrr::map(ports_list, process_array_fn, full_sample_datespan)
-
 
 flog.info("Merging port info with coordinates", name = "model_progress_log")
 

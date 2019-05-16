@@ -142,12 +142,6 @@ port_cyprid_compentency_fn <-
       p_emigration_competent_proportion <- p_emigration_competent_proportion *
         ((t1_date_global >= port_lifehistory_input[["juvenile_time"]]) + 0)
 
-      flog.trace("Juvenile time lag logic",
-        table(((t1_date_global >=
-          port_lifehistory_input[["juvenile_time"]]) + 0)),
-        name = "juve_lag_log", capture = TRUE
-      )
-
       # Number of compentent cyprids that are available to immigrate to the ships
 
       p_emigration_mat <- ceiling(outer(
@@ -228,7 +222,7 @@ port_immigration_fn <-
         )
 
         # Add stochastic establishment for larva
-        prob_establishment <- 1 - exp(-1e-5 * port_immigration_total[1, ])
+        prob_establishment <- 1 - exp(-1e-3 * port_immigration_total[1, ])
 
         p_random_inst_mort <- runif(
           n = length(prob_establishment), min = 0,
@@ -359,7 +353,7 @@ ship_immigration_fn <-
 
 
         # Add stochastic establishment for juveniles
-        prob_establishment <- 1 - exp(-1e-5 *
+        prob_establishment <- 1 - exp(-1e-3 *
           port_to_ship_migration_size[["juvenile"]])
         p_random <- runif(n = length(prob_establishment), min = 0, max = 1)
 

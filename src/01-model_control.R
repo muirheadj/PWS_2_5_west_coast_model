@@ -60,8 +60,8 @@ flog.logger("ports_n_trace", TRACE,
 flog.logger("model_progress", INFO,
   appender = appender.console())
 
-flog.logger("juve_lag", TRACE,
-  appender = appender.file(log_name("juvenile_trace.log")))
+#flog.logger("juve_lag", TRACE,
+#  appender = appender.file(log_name("juvenile_trace.log")))
 
 flog.logger("ships_pop_trace", TRACE,
   appender = appender.file(log_name("ships_pop_trace.log")))
@@ -72,7 +72,7 @@ flog.logger( "ports_instant_mortality_trace", TRACE,
 flog.logger("ships_emigration_trace", TRACE,
   appender = appender.file(log_name("ships_emigration_trace.log")))
 
-flog.threshold(INFO)
+flog.threshold(TRACE)
 
 # Set up lifestages, and indicate which lifestages disperse as 1.
 

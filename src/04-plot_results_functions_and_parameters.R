@@ -262,6 +262,7 @@ process_parameters_fn <- function(x){
 
 process_ports_fn <- function(i){
 	
+	browser()
 		ports_temp <- purrr::map(ports_list[i], process_array_fn, full_sample_datespan)[[1]]
 		
   # Note: as.Date assumes that the TZ is "UTC"
