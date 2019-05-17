@@ -258,11 +258,7 @@ process_parameters_fn <- function(x){
 }
 
 # This function processes the raw data from the ports results
-
-
 process_ports_fn <- function(i){
-	
-	browser()
 		ports_temp <- purrr::map(ports_list[i], process_array_fn, full_sample_datespan)[[1]]
 		
   # Note: as.Date assumes that the TZ is "UTC"
@@ -490,9 +486,9 @@ melt_ships_temp <- function(ships_temp){
 chunk_array <- function(x) {
 
 # This function takes in the ships_temp array and returns a slice of it
-# based on the row ids contained in the chunk x.
+# based on the row ids contained in the chunk x for juveniles and adults only
 
-  res <- ships_temp[x, , , drop = FALSE]
+  res <- ships_temp[x, 3:4 , , drop = FALSE]
     attr(res, "parameter") <- attr(ships_temp, "parameter")
     attr(res, "bootstrap") <- attr(ships_temp, "bootstrap")
     res

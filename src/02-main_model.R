@@ -1097,18 +1097,18 @@ main_model_fn <- function(ship_imo_tbl, param, A_mat, ports_pop, ...) {
 
     fill_cube_int(ships_pop, temp_ships_pop, ships_pop_idx)
 
-				if (get_flog_level("ships_pop_trace") == 9) {
+        if (get_flog_level("ships_pop_trace") == 9) {
 
-				# Calculate ship populations only if the values are being logged.
-				  ships_trace_pop <- matrixStats::rowMeans2(temp_ships_pop)
+        # Calculate ship populations only if the values are being logged.
+          ships_trace_pop <- matrixStats::rowMeans2(temp_ships_pop)
 
-				  names(ships_trace_pop) <- dimnames(temp_ships_pop)[[1]]
+          names(ships_trace_pop) <- dimnames(temp_ships_pop)[[1]]
 
-				  flog.trace("parameter%s ships_population %i %f %f %f %f",
-				    sprintf("%.03d", param_iter),
-				    t_global,
-				    ships_trace_pop[1],
-				    ships_trace_pop[2],
+          flog.trace("parameter%s ships_population %i %f %f %f %f",
+            sprintf("%.03d", param_iter),
+            t_global,
+            ships_trace_pop[1],
+            ships_trace_pop[2],
         ships_trace_pop[3],
         ships_trace_pop[4],
         name = "ships_pop_trace",

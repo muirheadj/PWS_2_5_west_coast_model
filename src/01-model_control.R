@@ -60,9 +60,6 @@ flog.logger("ports_n_trace", TRACE,
 flog.logger("model_progress", INFO,
   appender = appender.console())
 
-#flog.logger("juve_lag", TRACE,
-#  appender = appender.file(log_name("juvenile_trace.log")))
-
 flog.logger("ships_pop_trace", TRACE,
   appender = appender.file(log_name("ships_pop_trace.log")))
 

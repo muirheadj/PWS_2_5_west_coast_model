@@ -25,7 +25,7 @@ results_dir <- find_root_file("results", criterion = root_crit)
 figures_dir <- find_root_file("figures", criterion = root_crit)
 data_dir <- find_root_file("data", criterion = root_crit)
 
-process_ports_data <- TRUE
+process_ports_data <- FALSE
 process_ships_data <- TRUE
 
 flog.logger(name = "model_progress_log", INFO, appender = appender.console())
@@ -106,9 +106,9 @@ if (isTRUE(process_ships_data)) {
   flog.info("Beginning ships processing", name = "model_progress_log")
   
   for (i in seq_along(ships_list)) {
-  
+
     ships_temp <- process_array_fn(ships_list[[i]], full_sample_datespan)
-    
+   
     ships_chunks <- chunkr(seq(13149), chunk_size = 1000)
     
     # Due to memory limitations, split the array into chunks based on time,
@@ -724,9 +724,6 @@ fig6a <- ggplot(
   invaded_ships_df,
   aes(x = date, y = mean, colour = scenario)
 ) +
-  geom_errorbar(aes(ymin = pmax(0, lcl), ymax = pmax(0, ucl)),
-    alpha = 0.1
-  ) +
   geom_path() +
   guides(color = guide_legend(override.aes = list(size = 4))) +
   scale_color_manual(values = custom_cols, drop = FALSE) +
