@@ -4,3 +4,8 @@ munge/figs
 skeleton.bib
 docker
 results
+2015-09-10 logs.tar.bz2
+2019-05-17 logs_20190517.tar.bz2
+epi_run20190517.job
+epi_run20190520.job
+rsync_to_hydra2.tcsh

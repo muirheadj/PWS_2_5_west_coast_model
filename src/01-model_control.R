@@ -240,8 +240,8 @@ seed_ports_fn <- function(param, seed_names, ports_pop_input, lifestages) {
   n_at_carrying_capacity <- param[, "k_ports"]
 
   n_at_stability <- c(
-    larva = 837611569, cyprid = 92118541,
-    juvenile = 11155834, adult = 31199732
+    larva = 8905713602, cyprid = 936133112,
+    juvenile = 108947634, adult = 325860930
   )
 
   seed_value <- array(

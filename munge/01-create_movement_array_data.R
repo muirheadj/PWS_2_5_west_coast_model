@@ -8,7 +8,6 @@ library("reshape2")
 library("data.table")
 library("dplyr")
 library("assertive")
-library("Hmisc")
 library("stringr")
 library("readr")
 library("futile.logger")
@@ -417,7 +416,7 @@ datetime_df <- tibble(
   datetime =
     seq(
       from = as.POSIXct("2010-01-01 00:00:00", tz = "UTC"),
-      to = as.POSIXct("2018-12-31 18:00:00", tz = "UTC") + (6 * 3600),
+      to = as.POSIXct("2017-12-31 18:00:00", tz = "UTC") + (6 * 3600),
       by = "6 hours"
     )
 ) %>%

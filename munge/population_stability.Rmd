@@ -6,6 +6,7 @@ bibliography: skeleton.bib
 citation_package: biblatex
 output:
   bookdown::pdf_book:
+    highlight: tango
     keep_tex: yes
     toc: false
   html_document: default
@@ -67,11 +68,11 @@ balanus_lh <- list("larva" = list("sigma" = 0.515, "T" = 44),
 
 
 The function used to estimate the value for $\gamma_{juvenile}$ for an overall
-dominant eigenvalue of 1.0006.
+dominant eigenvalue of 1.006.
 
 ```{r fit-gamma}
 balanus_fit <- function(log_gamma_3) {
-  lam <- 1.0006
+  lam <- 1.006
 
   sigma_1 <- balanus_lh[["larva"]][["sigma"]]
   gamma_1 <- 1/balanus_lh[["larva"]][["T"]]
@@ -116,7 +117,7 @@ gamma_min_function <- function(gamma) {
   A_local <- balanus_fit(gamma)[["A"]]
   A_local[is.nan(A_local)] <- .Machine$double.eps
 
-  res <- (1.0006 - eigen.analysis(A_local)$lambda1)^2
+  res <- (1.006 - eigen.analysis(A_local)$lambda1)^2
 }
 
 ```
@@ -128,7 +129,7 @@ gamma_min_function <- function(gamma) {
   A_local <- balanus_fit(gamma)[["A"]]
   A_local[is.nan(A_local)] <- .Machine$double.eps
 
-  res <- (1.0006 - eigen.analysis(A_local)$lambda1)^2
+  res <- (1.006 - eigen.analysis(A_local)$lambda1)^2
 }
 
 
@@ -143,6 +144,12 @@ The resulting population transition matrix is
 A_fit <- balanus_fit(res$optim$bestmem)[["A"]]
 rownames(A_fit) <- c("larva", "cyprid", "juvenile", "adult")
 colnames(A_fit) <- c("larva", "cyprid", "juvenile", "adult")
+
+saveRDS(A_fit, file.path(root_dir(), "data",
+                         "bal_improvisus_pop_transition.rds"),
+        version = 2)
+
+
 knitr::kable(A_fit)
 ```
 

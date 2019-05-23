@@ -95,8 +95,10 @@ port_area <- yaml_params[["params"]][["port_area"]]# 312 times larger than max w
 # Define carrying capacity per square meter
 max_density_individuals <- yaml_params[["params"]][["max_density_individuals"]]
 
+
+
 pop_transition <- readRDS(file.path(root_dir(), "data",
-	"bal_improvisus_pop_transition.rds"))
+	"bal_improvisus_pop_stab_transition.rds"))
 
 
 # Generate combination of parameters
@@ -206,8 +208,8 @@ seed_ports_fn <- function(param, seed_names, ports_pop_input, lifestages) {
   n_at_carrying_capacity <- param[, "k_ports"]
 
   n_at_stability <- c(
-    larva =  864335807, cyprid =  88966194,
-    juvenile = 11225670, adult = 31363907
+    larva =  8905713602, cyprid = 936133112,
+    juvenile = 108947634, adult = 325860930
   )
 
   seed_value <- array(

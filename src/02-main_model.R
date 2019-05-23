@@ -51,8 +51,8 @@ find_date_in_chunk_fn <- function(date_slice, date_list_ext_chunks) {
 
 find_date_in_position_fn <- function(date, ship_position) {
 
-  # This function finds out the corresponding position in the ship position_array
-  # a particular date is in.
+# This function finds out the corresponding position in the ship position_array
+# a particular date is in.
 
   date <- as.character(date)
   t1 <- match(date, dimnames(ship_position)[[3]])
@@ -114,32 +114,29 @@ ship_and_port_names_from_ship_position <- function(ship_position, time_index) {
 }
 
 # PORT CYPRID COMPENTENCY ------------------------------------------------------
-port_cyprid_compentency_fn <-
-  function(ports_array = ports_array,
-             port_competency_proportion = port_compentency_prob,
-             lifestage_vec = port_to_ship_lifestages, x = t_global,
-             port_emigration_input = port_cyprid_compentency,
-             port_lifehistory_input = port_lifehistory_status) {
+port_cyprid_compentency_fn <- function(ports_array = ports_array,
+  port_competency_proportion = port_compentency_prob,
+  lifestage_vec = port_to_ship_lifestages, x = t_global,
+  port_emigration_input = port_cyprid_compentency,
+  port_lifehistory_input = port_lifehistory_status) {
 
+  # This function calculations the outgoing emigration of dispersing lifestages
+  # from the previous time step. Note: Emigration takes place even when the
+  # ships aren't there.
 
-    # This function calculations the outgoing emigration of dispersing lifestages
-    # from the previous time step. Note: Emigration takes place even when the
-    # ships aren't there.
+  n_ports <- dim(ports_array)[[3]]
 
-    n_ports <- dim(ports_array)[[3]]
+  # No emigration before the second time step of the model
+  if (x > 1) {
 
-    # No emigration before the second time step of the model
-    if (x > 1) {
-      # Probability that the cyprid is compentent
-      p_emigration_competent_proportion <- rbinom(n_ports,
-        size = 1000,
-        p = port_competency_proportion
-      ) / 1000
+  # Probability that the cyprid is compentent
+    p_emigration_competent_proportion <- rbinom(n_ports, size = 1000,
+        p = port_competency_proportion) / 1000
 
-      # Check to see if the juvenile time lag has elapsed. This returns either the
-      # proportion or a 0 if the time has not elapsed.
+  # Check to see if the juvenile time lag has elapsed. This returns either the
+  # proportion or a 0 if the time has not elapsed.
 
-      p_emigration_competent_proportion <- p_emigration_competent_proportion *
+    p_emigration_competent_proportion <- p_emigration_competent_proportion *
         ((t1_date_global >= port_lifehistory_input[["juvenile_time"]]) + 0)
 
       # Number of compentent cyprids that are available to immigrate to the ships
@@ -222,7 +219,7 @@ port_immigration_fn <-
         )
 
         # Add stochastic establishment for larva
-        prob_establishment <- 1 - exp(-1e-3 * port_immigration_total[1, ])
+        prob_establishment <- 1 - exp(-1e-2 * port_immigration_total[1, ])
 
         p_random_inst_mort <- runif(
           n = length(prob_establishment), min = 0,
@@ -333,11 +330,13 @@ ship_immigration_fn <-
         # frac_transferred is the random proportion that is able to be transferred
         # to the ship
 
+        cypr_juve_transition_prob <- 0.0524821
+
         port_to_ship_migration_proportion <- port_ship_migration %>%
           left_join(ship_imo_tbl, by = c("ships" = "lrnoimoshipno")) %>%
           group_by(ports) %>%
           mutate(
-            frac_transferred = rbinom(1, size = 1000, prob = 0.04) / 1000
+            frac_transferred = rbinom(1, size = 1000, prob = cypr_juve_transition_prob) / 1000
           ) %>%
           mutate(wsa_scale = effective_wsa / sum(effective_wsa, port_area,
             na.rm = TRUE
@@ -353,7 +352,7 @@ ship_immigration_fn <-
 
 
         # Add stochastic establishment for juveniles
-        prob_establishment <- 1 - exp(-1e-3 *
+        prob_establishment <- 1 - exp(-1e-2 *
           port_to_ship_migration_size[["juvenile"]])
         p_random <- runif(n = length(prob_establishment), min = 0, max = 1)
 
@@ -435,6 +434,8 @@ port_juvenile_production_fn <-
         # frac_transferred is the random proportion that is able to be transferred
         # to the ship
 
+        cypr_juve_transition_prob <- 0.0524821
+
         port_port_juvenile_proportion <- port_port_juve_production %>%
           left_join(ship_imo_tbl, by = c("ships" = "lrnoimoshipno")) %>%
           group_by(ports) %>%
@@ -442,7 +443,7 @@ port_juvenile_production_fn <-
             wsa_scale = port_area / sum(effective_wsa, port_area,
               na.rm = TRUE
             ),
-            frac_transferred = rbinom(1, size = 1000, prob = 5.428304e-02) / 1000
+            frac_transferred = rbinom(1, size = 1000, prob = cypr_juve_transition_prob) / 1000
           )
 
         # The number of new juveniles is the available pool scaled by relative
@@ -579,7 +580,7 @@ main_model_fn <- function(ship_imo_tbl, param, A_mat, ports_pop, ...) {
   # Generate hybrid indicies to read the ff arrays
   hi_ship <- 1:dim(k_ships)[2] # Index for ships
   hi_port <- 1:dim(ports_pop)[3] # Index for ports
-  hi_t1 <- 1:50 # Index for time slices 1:50\
+  hi_t1 <- 1:50 # Index for time slices 1:50
   hi_t2 <- 51:100 # Index for time slices 51:100
 
   last_chunk <- tail(date_list_ext_chunks, 1)
