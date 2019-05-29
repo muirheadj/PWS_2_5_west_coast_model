@@ -109,7 +109,7 @@ if (isTRUE(process_ships_data)) {
 
     ships_temp <- process_array_fn(ships_list[[i]], full_sample_datespan)
    
-    ships_chunks <- chunkr(seq(13149), chunk_size = 1000)
+    ships_chunks <- chunkr(full_sample_datespan, chunk_size = 1000)
     
     # Due to memory limitations, split the array into chunks based on time,
     # and calculate and save the resulting summary data.frames.
@@ -414,12 +414,8 @@ rm(destination_ports_df, destination_ports_lifestage_df)
 fig2b <- ggplot(
   destination_ports_mean_all_df,
   aes(x = date, y = mean, color = scenario)) +
-  geom_path() 
-  
-  +
-  
-  
-  scale_color_manual(scenario,
+  geom_path() +
+  scale_color_manual("scenario",
     values = custom_cols,
     drop = FALSE
   ) 

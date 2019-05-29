@@ -145,9 +145,9 @@ A_fit <- balanus_fit(res$optim$bestmem)[["A"]]
 rownames(A_fit) <- c("larva", "cyprid", "juvenile", "adult")
 colnames(A_fit) <- c("larva", "cyprid", "juvenile", "adult")
 
+
 saveRDS(A_fit, file.path(root_dir(), "data",
-                         "bal_improvisus_pop_transition.rds"),
-        version = 2)
+    "bal_improvisus_pop_stab_transition.rds"), version = 2)
 
 
 knitr::kable(A_fit)
@@ -161,7 +161,7 @@ names(A_gammas) <- c("larva", "cyprid", "juvenile", "adult")
 knitr::kable(A_gammas)
 ```
 
-```{r run-model, include=FALSE, eval=FALSE}
+```{r run-model, include=FALSE, eval=TRUE}
 source(path(root_dir(), "munge", "01-model_control_pop_stability.R"))
 
 ```

@@ -3,6 +3,7 @@ shinyServer(function(input, output, session) {
   library(tidyr)
   library(dplyr)
   library(ggplot2)
+  library(plotly)
   library(rprojroot)
   library(fs)
 
@@ -12,7 +13,7 @@ shinyServer(function(input, output, session) {
   options("readr.num_columns" = 0)
 
 
-   output$port_pop_Plot <- renderPlot({
+   output$port_pop_Plot <- renderPlotly({
      portReaderData <- reactiveFileReader(10000, session,
         path(root_dir(), "logs", paste0("parameter00", input$param, "_ports_pop_trace.log")),
         read_log)
@@ -27,13 +28,14 @@ shinyServer(function(input, output, session) {
 
  	  p1 <- ggplot(port_pop_melt, aes(x = iteration, y = population, color = lifestage)) +
  		  facet_wrap(~parameter) +
- 	    geom_path(lwd = 2) +
- 	    theme_dark(base_size = 20)
-    p1
+ 	    geom_path(lwd = 1) +
+ 	    theme_dark(base_size = 12)
+ 	  q1 <- ggplotly(p1)
+    q1
 
    })
 
-  output$port_n_Plot <- renderPlot({
+  output$port_n_Plot <- renderPlotly({
 
     port_n_ReaderData <- reactiveFileReader(5000, session,
             path(root_dir(), "logs", paste0("parameter00", input$param,
@@ -52,8 +54,10 @@ shinyServer(function(input, output, session) {
 	p2 <- ggplot(port_n_melt, aes(x = iteration, y = n_invaded,
       color = lifestage)) +
 		facet_wrap(~parameter) +
-	  geom_path(lwd = 2) +
-	  theme_dark(base_size = 20)
- p2
+	  geom_path(lwd = 1) +
+	  theme_dark(base_size = 12)
+
+	q2 <- ggplotly(p2)
+  q2
   })
 })

@@ -47,7 +47,7 @@ log_name <- function(x) path(
 flog.logger("stab_ports_pop_trace", TRACE,
   appender = appender.tee(log_name("stab_ports_pop_trace.log"))
   )
-  
+
 flog.logger(
   name = "model_progress", INFO,
   appender = appender.console()
@@ -95,8 +95,6 @@ port_area <- yaml_params[["params"]][["port_area"]]# 312 times larger than max w
 # Define carrying capacity per square meter
 max_density_individuals <- yaml_params[["params"]][["max_density_individuals"]]
 
-
-
 pop_transition <- readRDS(file.path(root_dir(), "data",
 	"bal_improvisus_pop_stab_transition.rds"))
 
@@ -131,10 +129,7 @@ parameter_grid <- parameter_grid %>%
   mutate(parameter_id = sprintf("parameter%0.3d", seq(nrow(.)))) %>%
   select(parameter_id, everything())
 
-saveRDS(parameter_grid, file = path(root_dir(), "data", "parameters_df",
-  ext = "rds"),
-  compress = TRUE)
- 
+
 # Extract Ports habitat suitability as a vector --------------------------------
 
 ports_habitat_suitability <- port_data %>%

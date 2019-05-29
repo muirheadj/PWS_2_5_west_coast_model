@@ -24,7 +24,7 @@ yaml_params <- yaml::read_yaml(file.path(root_dir(), "params.yaml"))
 
 source_region <- "foo" # Since foo will not be found, run all source_regions
 
-full_sample_datespan <- seq(13149)
+full_sample_datespan <- seq(11689)
 
 # Define color palettes
 custom_cols <- c("#440154FF", "#7AD151FF")
@@ -210,6 +210,9 @@ create_filelist_from_data <- function(pattern,  n_return_check = NULL){
 # Processing data section ------------------------------------------------------
 
 process_array_fn <- function(x, datespan){
+
+# This function reads in the raw array results, subsets the results according
+# to the date (if necessary), and assigns attributes to the array.
   temp <- readRDS(x)
   if (length(dim(temp)) == 3) {
     temp2 <- temp[datespan, , , drop = FALSE]

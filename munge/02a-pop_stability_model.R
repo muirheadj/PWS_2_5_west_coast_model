@@ -72,7 +72,7 @@ main_model_fn <- function(ship_imo_tbl, param_grid, A_mat, ports_pop, ...) {
   dateseq <- as.POSIXct(dimnames(ports_pop)[[1]], tz = "UTC")
 
   # As character
-		date_list_ext <- dimnames(ports_pop)[[1]]
+	date_list_ext <- dimnames(ports_pop)[[1]]
 
   # date to set life-history time lag limit
 

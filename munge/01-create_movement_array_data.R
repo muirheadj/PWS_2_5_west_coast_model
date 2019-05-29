@@ -119,7 +119,7 @@ arrivals_qry <- "SELECT
             AND Departure_date IS NOT NULL)
             AND Status = 'reviewed'
             AND Arrival_Coast IN ('ca_west', 'West', 'Alaska')
-            AND Arrival_date BETWEEN DATE('2010-01-01') AND DATE('2017-12-31')
+            AND Arrival_date BETWEEN DATE('2010-01-01') AND DATE('2018-01-01')
     ORDER BY NBIC_Vessel, Arrival_Date"
 
 arrivals_full <- tbl(ports_con, sql(arrivals_qry)) %>%
@@ -416,7 +416,7 @@ datetime_df <- tibble(
   datetime =
     seq(
       from = as.POSIXct("2010-01-01 00:00:00", tz = "UTC"),
-      to = as.POSIXct("2017-12-31 18:00:00", tz = "UTC") + (6 * 3600),
+      to = as.POSIXct("2018-01-01 00:00:00", tz = "UTC"),
       by = "6 hours"
     )
 ) %>%

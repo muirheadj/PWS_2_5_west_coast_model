@@ -9,6 +9,7 @@
 param_iter <- commandArgs(trailingOnly = TRUE)
 param_iter <- as.integer((param_iter))
 
+param_iter <- 2
 suppressMessages(TRUE)
 
 library("methods")
@@ -37,6 +38,7 @@ options(tibble.width = Inf)
 # Imput model parameters from YAML file
 
 yaml_params <- yaml::read_yaml(path(root_dir(), "params.yaml"))
+
 
 # Set up tracer and info loggers
 
@@ -176,7 +178,7 @@ full_date_list <- format(seq(
   from = as.POSIXct("2010-01-01 00:00:00",
     tz = "UTC"
   ),
-  to = as.POSIXct("2017-12-31 18:00:00", tz = "UTC"),
+  to = as.POSIXct("2018-01-01 00:00:00", tz = "UTC"),
   by = "6 hours"
 ), format = "%Y-%m-%d %H:%M:%S")
 
@@ -229,7 +231,17 @@ source(path(root_dir(), "munge", "04-select_ship_sources_for_caribbean.R"))
 # Setup invasion status (population density of organisms) of initial ports
 # (ports_array)
 
-seed_ports_fn <- function(param, seed_names, ports_pop_input, lifestages) {
+parse_stable_population_size <- function(x){
+# This function just takes the parameters from the yaml header and reduces
+# it to a named vector.
+
+	res <- x[["params"]][["stable_population_size"]]
+	res <- unlist(res)
+}
+
+
+seed_ports_fn <- function(param, seed_names, ports_pop_input, lifestages,
+    yaml_params) {
 
   # Check if port names matches up with the ports_ppop_input
   flog.info("Port name check: %s", all(dimnames(ports_pop_input)[[3]] %in%
@@ -239,10 +251,7 @@ seed_ports_fn <- function(param, seed_names, ports_pop_input, lifestages) {
 
   n_at_carrying_capacity <- param[, "k_ports"]
 
-  n_at_stability <- c(
-    larva = 8905713602, cyprid = 936133112,
-    juvenile = 108947634, adult = 325860930
-  )
+  n_at_stability <- parse_stable_population_size(yaml_params)
 
   seed_value <- array(
     data = rep(n_at_stability,
@@ -282,7 +291,8 @@ ports_pop_temp <- ports_array_add(ports_pop_temp,
 ports_pop <- seed_ports_fn(
   param = parameter_grid[param_iter, ],
   seed_names = seed_ports, ports_pop_temp,
-  lifestages = ship_to_port_lifestages)
+  lifestages = ship_to_port_lifestages,
+  yaml_params)
 
 source(path(root_dir(), "src", "02-main_model.R"))
 

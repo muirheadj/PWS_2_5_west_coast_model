@@ -546,8 +546,12 @@ main_model_fn <- function(ship_imo_tbl, param, A_mat, ports_pop, ...) {
   ship_port_prob <- param[["ship_port_prob"]]
   port_compentency_prob <- param[["port_compentency_prob"]]
 
+
+  # Get vector of datetimes in character format
+  date_list_ext <- dimnames(ports_pop)[[1]]
+  
   # Get sequence of datetimes in POSIXct format
-  dateseq <- as.POSIXct(dimnames(ports_pop)[[1]], tz = "UTC")
+  dateseq <- as.POSIXct(date_list_ext, tz = "UTC")
 
   # date to set life-history time lag limit
 
@@ -557,10 +561,8 @@ main_model_fn <- function(ship_imo_tbl, param, A_mat, ports_pop, ...) {
   # pull out
 
   chunk_size <- 50
-
-  date_list_ext <- dimnames(ships_pop)[[1]]
   date_list_ext_chunks <- chunkr(date_list_ext, chunk_size = chunk_size)
-
+  
   # Array to store ship specific probability of infecting ports
   ship_imo_tbl[["wsa_prob"]] <- ship_port_prob
   ships_invasion_prob <- ship_imo_tbl[["wsa_prob"]]
@@ -613,7 +615,8 @@ main_model_fn <- function(ship_imo_tbl, param, A_mat, ports_pop, ...) {
     res
   }
 
-  for (t_global in seq_along(date_list_ext)) {
+  #for (t_global in seq_along(date_list_ext)) {
+  for (t_global in c(1, 2, seq(11650, 11689))) {
     # Get the time slice position in the chunk as well as the name in the chunk
     # Current date
 
@@ -810,13 +813,11 @@ main_model_fn <- function(ship_imo_tbl, param, A_mat, ports_pop, ...) {
     # Calculate stochastic population projection matrix given the time lags
     # for each port and each ship
 
-    port_pop_transition <- port_stoch_pop(
-      A_mat, current_datetime,
+    port_pop_transition <- port_stoch_pop(A_mat, current_datetime,
       port_lifehistory_status
     )
 
-    ship_pop_transition <- ship_stoch_pop(
-      A_mat, current_datetime,
+    ship_pop_transition <- ship_stoch_pop(A_mat, current_datetime,
       ship_lifehistory_status
     )
 
@@ -875,20 +876,22 @@ main_model_fn <- function(ship_imo_tbl, param, A_mat, ports_pop, ...) {
       }
 
       if (t_chunk == last_chunk_name) {
-        # Have to adjust for the last chunk which only has 5 'slices'
+        # Have to adjust for the last chunk which may have fewer than 50 'slices'
 
         ship_position[hi_ship, hi_port, 51:(51 + last_chunk_length - 1)] <-
           chunk_2[hi_ship, hi_port, last_chunk_length]
 
         dimnames(ship_position)[[3]][1:(51 + last_chunk_length - 1)] <-
           c(dimnames(chunk_1)[[3]], dimnames(chunk_2)[[3]])
+          
+       ship_position <- ship_position[, , 1:(chunk_size + last_chunk_length)]
+       
       }
 
       t_position_idx <- find_date_in_position_fn(t_date_global, ship_position)
 
       # Also get the time slice position for the previous time step
-      t1_position_idx <- find_date_in_position_fn(
-        t1_date_global,
+      t1_position_idx <- find_date_in_position_fn(t1_date_global,
         ship_position
       )
 
@@ -1105,11 +1108,11 @@ main_model_fn <- function(ship_imo_tbl, param, A_mat, ports_pop, ...) {
 
           names(ships_trace_pop) <- dimnames(temp_ships_pop)[[1]]
 
-          flog.trace("parameter%s ships_population %i %f %f %f %f",
-            sprintf("%.03d", param_iter),
-            t_global,
-            ships_trace_pop[1],
-            ships_trace_pop[2],
+				  flog.trace("parameter%s ships_population %i %f %f %f %f",
+				    sprintf("%.03d", param_iter),
+				    t_global,
+				    ships_trace_pop[1],
+				    ships_trace_pop[2],
         ships_trace_pop[3],
         ships_trace_pop[4],
         name = "ships_pop_trace",
