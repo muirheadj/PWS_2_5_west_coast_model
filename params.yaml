@@ -25,5 +25,4 @@ params:
   repro_lag: 1209600
   ship_port_prob: 1.0
   port_comptency_prob: 1.0
-  boot_iter: 1
   effective_wsa_scale: 0.1

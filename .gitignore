@@ -9,3 +9,4 @@ results
 epi_run20190517.job
 epi_run20190520.job
 rsync_to_hydra2.tcsh
+*.job

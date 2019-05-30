@@ -26,13 +26,8 @@ shinyServer(function(input, output, session) {
  	    select(parameter, iteration, larva, cyprid, juvenile, adult) %>%
       gather(lifestage, population, -parameter, -iteration, factor_key = TRUE)
 
- 	  p1 <- ggplot(port_pop_melt, aes(x = iteration, y = population, color = lifestage)) +
- 		  facet_wrap(~parameter) +
- 	    geom_path(lwd = 1) +
- 	    theme_dark(base_size = 12)
- 	  q1 <- ggplotly(p1)
-    q1
-
+ 	 q1 <- plot_ly(port_pop_melt, x = ~iteration, y = ~population, color = ~lifestage)
+ 	 add_paths(q1)
    })
 
   output$port_n_Plot <- renderPlotly({
@@ -51,13 +46,7 @@ shinyServer(function(input, output, session) {
 	  select(parameter, iteration, larva, cyprid, juvenile, adult) %>%
     gather(lifestage, n_invaded, -parameter, -iteration, factor_key = TRUE)
 
-	p2 <- ggplot(port_n_melt, aes(x = iteration, y = n_invaded,
-      color = lifestage)) +
-		facet_wrap(~parameter) +
-	  geom_path(lwd = 1) +
-	  theme_dark(base_size = 12)
-
-	q2 <- ggplotly(p2)
-  q2
+   q2 <- plot_ly(port_n_melt, x = ~iteration, y = ~n_invaded, color = ~lifestage)
+ 	 add_paths(q2)
   })
 })

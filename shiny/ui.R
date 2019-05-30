@@ -13,9 +13,9 @@ shinyUI(fillPage(
     mainPanel(
   #    textOutput(outputId = "param_text"),
       h3("Mean non-seed ports population size"),
-       plotlyOutput(outputId = "port_pop_Plot", height = "400px"),
+       plotly::plotlyOutput(outputId = "port_pop_Plot", height = "400px"),
       h3("Non-seed ports number of invaded ports"),
-      plotlyOutput(outputId = "port_n_Plot", height = "400px")
+      plotly::plotlyOutput(outputId = "port_n_Plot", height = "400px")
     )
   )
 ))

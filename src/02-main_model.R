@@ -615,8 +615,7 @@ main_model_fn <- function(ship_imo_tbl, param, A_mat, ports_pop, ...) {
     res
   }
 
-  #for (t_global in seq_along(date_list_ext)) {
-  for (t_global in c(1, 2, seq(11650, 11689))) {
+  for (t_global in seq_along(date_list_ext)) {
     # Get the time slice position in the chunk as well as the name in the chunk
     # Current date
 
@@ -1108,11 +1107,11 @@ main_model_fn <- function(ship_imo_tbl, param, A_mat, ports_pop, ...) {
 
           names(ships_trace_pop) <- dimnames(temp_ships_pop)[[1]]
 
-				  flog.trace("parameter%s ships_population %i %f %f %f %f",
-				    sprintf("%.03d", param_iter),
-				    t_global,
-				    ships_trace_pop[1],
-				    ships_trace_pop[2],
+          flog.trace("parameter%s ships_population %i %f %f %f %f",
+            sprintf("%.03d", param_iter),
+            t_global,
+            ships_trace_pop[1],
+            ships_trace_pop[2],
         ships_trace_pop[3],
         ships_trace_pop[4],
         name = "ships_pop_trace",

@@ -6,10 +6,14 @@
 ###############################################################################
 
 # Pass parameters to model based on arguments supplied to Rscript
-param_iter <- commandArgs(trailingOnly = TRUE)
-param_iter <- as.integer((param_iter))
+com_args <- commandArgs(trailingOnly = TRUE)
 
-param_iter <- 2
+param_iter <- as.integer(com_args[1])
+boot_iter <- as.integer(com_args[2])
+
+message("param_iter:", param_iter)
+message("boot_iter:", boot_iter)
+
 suppressMessages(TRUE)
 
 library("methods")
@@ -181,9 +185,6 @@ full_date_list <- format(seq(
   to = as.POSIXct("2018-01-01 00:00:00", tz = "UTC"),
   by = "6 hours"
 ), format = "%Y-%m-%d %H:%M:%S")
-
-# Cycle through bootstrap population loops
-boot_iter <- yaml_params[["params"]][["boot_iter"]]
 
 scenario <- parameter_grid[param_iter, "scenario"]
 
