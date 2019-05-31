@@ -74,6 +74,9 @@ flog.logger( "ports_instant_mortality_trace", TRACE,
 
 flog.logger("ships_emigration_trace", TRACE,
   appender = appender.file(log_name("ships_emigration_trace.log")))
+  
+flog.logger("ship_position_chunks", TRACE,
+  appender = appender.file(log_name("ship_position_chunks_trace.log")))
 
 flog.threshold(TRACE)
 
@@ -179,12 +182,9 @@ names(ports_habitat_suitability) <- port_data %>%
 
 # Re-assign date_list_ext
 full_date_list <- format(seq(
-  from = as.POSIXct("2010-01-01 00:00:00",
-    tz = "UTC"
-  ),
-  to = as.POSIXct("2018-01-01 00:00:00", tz = "UTC"),
-  by = "6 hours"
-), format = "%Y-%m-%d %H:%M:%S")
+  from = as.POSIXct(yaml_params[["params"]][["start_date"]], tz = "UTC"),
+  to = as.POSIXct(yaml_params[["params"]][["end_date"]], tz = "UTC"),
+  by = "6 hours"), format = "%Y-%m-%d %H:%M:%S")
 
 scenario <- parameter_grid[param_iter, "scenario"]
 
@@ -256,13 +256,10 @@ seed_ports_fn <- function(param, seed_names, ports_pop_input, lifestages,
 
   seed_value <- array(
     data = rep(n_at_stability,
-      each = dim(ports_pop_input)[1]
-    ),
+      each = dim(ports_pop_input)[1]),
     dim = list(dim(ports_pop_input)[1], length(lifestages), nrow(seed_names)),
-    dimnames = list(
-      dimnames(ports_pop_input)[[1]], names(lifestages),
-      seed_names$port
-    )
+    dimnames = list(dimnames(ports_pop_input)[[1]], names(lifestages),
+      seed_names$port)
   )
 
   # Set up some populations in the seed ports
@@ -310,6 +307,7 @@ model_run <- main_model_fn(ship_imo_tbl = ship_imo_tbl,
   ship_to_port_lifestages,
   port_to_ship_lifestages,
   ports_instant_mortality,
-  ports_habitat_suitability)
+  ports_habitat_suitability,
+  yaml_params)
 
 flog.info("Finished model run", name = "model_progress.log")

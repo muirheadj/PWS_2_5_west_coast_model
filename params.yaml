@@ -26,3 +26,8 @@ params:
   ship_port_prob: 1.0
   port_comptency_prob: 1.0
   effective_wsa_scale: 0.1
+  p_establishment: 1.0e-3
+  chunk_size: 50
+  start_date: '2010-01-01 00:00:00'
+  end_date: '2018-01-01 00:00:00'
+ 

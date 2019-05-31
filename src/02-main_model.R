@@ -174,7 +174,8 @@ port_immigration_fn <-
            x = t_global,
            ports_instant_mortality,
            ports_habitat_suitability,
-           habitat_threshold) {
+           habitat_threshold,
+           p_establishment) {
 
     # Make sure to use ship position from t_global - 1
     if (x > 1) {
@@ -219,7 +220,7 @@ port_immigration_fn <-
         )
 
         # Add stochastic establishment for larva
-        prob_establishment <- 1 - exp(-1e-2 * port_immigration_total[1, ])
+        prob_establishment <- 1 - exp(-p_establishment * port_immigration_total[1, ])
 
         p_random_inst_mort <- runif(
           n = length(prob_establishment), min = 0,
@@ -295,7 +296,8 @@ ship_immigration_fn <-
            ship_position = ship_position,
            t1 = t1_position_idx,
            ship_immigration_input = ship_immigration,
-           x = t_global, port_area = port_area) {
+           x = t_global, port_area = port_area,
+           p_establishment) {
     if (x > 1) {
       t1_global <- x - 1
 
@@ -352,7 +354,7 @@ ship_immigration_fn <-
 
 
         # Add stochastic establishment for juveniles
-        prob_establishment <- 1 - exp(-1e-2 *
+        prob_establishment <- 1 - exp(-p_establishment *
           port_to_ship_migration_size[["juvenile"]])
         p_random <- runif(n = length(prob_establishment), min = 0, max = 1)
 
@@ -545,22 +547,28 @@ main_model_fn <- function(ship_imo_tbl, param, A_mat, ports_pop, ...) {
   fw_reduction <- param[["fw_reduction"]]
   ship_port_prob <- param[["ship_port_prob"]]
   port_compentency_prob <- param[["port_compentency_prob"]]
+		p_establishment <- yaml_params[["params"]][["p_establishment"]]
 
 
-  # Get vector of datetimes in character format
-  date_list_ext <- dimnames(ports_pop)[[1]]
-  
   # Get sequence of datetimes in POSIXct format
-  dateseq <- as.POSIXct(date_list_ext, tz = "UTC")
-
-  # date to set life-history time lag limit
+  dateseq <- seq(from = as.POSIXct(yaml_params[["params"]][["start_date"]],
+      tz = "UTC", origin = "1970-01-01"),
+    to = as.POSIXct(yaml_params[["params"]][["end_date"]], tz = "UTC",
+      origin = "1970-01-01"),
+    by = "6 hours")
+  
+  # Get vector of datetimes in character format
+  date_list_ext <- format(dateseq, format = "%Y-%m-%d %H:%M:%S")
+  
+  # date to set life-history time lag limit = 1 day past
 
   date_pastend <- dateseq[length(dateseq)] + (24 * 3600)
 
   # Create list of date chunks in order to figure out which bootstrap chunks to
   # pull out
 
-  chunk_size <- 50
+  chunk_size <- yaml_params[["params"]][["chunk_size"]]
+  
   date_list_ext_chunks <- chunkr(date_list_ext, chunk_size = chunk_size)
   
   # Array to store ship specific probability of infecting ports
@@ -829,6 +837,7 @@ main_model_fn <- function(ship_imo_tbl, param, A_mat, ports_pop, ...) {
       chunk_load2 <- t_chunk
     }
 
+
     if (t_chunk != current_chunk) {
       chunk_1 <- readRDS(path(
         root_dir(), "data",
@@ -868,31 +877,29 @@ main_model_fn <- function(ship_imo_tbl, param, A_mat, ports_pop, ...) {
           hi_ship, hi_port,
           hi_t1
         ]
-        dimnames(ship_position)[[3]] <- c(
-          dimnames(chunk_1)[[3]],
-          dimnames(chunk_2)[[3]]
-        )
+        dimnames(ship_position)[[3]] <- c(dimnames(chunk_1)[[3]],
+          dimnames(chunk_2)[[3]])
       }
 
       if (t_chunk == last_chunk_name) {
-        # Have to adjust for the last chunk which may have fewer than 50 'slices'
+        # Have to adjust for the last chunk which may have fewer than
+        # 50 'slices'
 
         ship_position[hi_ship, hi_port, 51:(51 + last_chunk_length - 1)] <-
           chunk_2[hi_ship, hi_port, last_chunk_length]
 
         dimnames(ship_position)[[3]][1:(51 + last_chunk_length - 1)] <-
           c(dimnames(chunk_1)[[3]], dimnames(chunk_2)[[3]])
-          
+
        ship_position <- ship_position[, , 1:(chunk_size + last_chunk_length)]
-       
+
       }
 
       t_position_idx <- find_date_in_position_fn(t_date_global, ship_position)
 
       # Also get the time slice position for the previous time step
       t1_position_idx <- find_date_in_position_fn(t1_date_global,
-        ship_position
-      )
+        ship_position)
 
       # Check to make sure the current chunk is updated on changes in the
       # chunk
@@ -904,17 +911,18 @@ main_model_fn <- function(ship_imo_tbl, param, A_mat, ports_pop, ...) {
 
       # Also get the time slice position for the previous time step
 
-      t1_position_idx <- find_date_in_position_fn(
-        t1_date_global,
-        ship_position
-      )
+      t1_position_idx <- find_date_in_position_fn(t1_date_global,
+        ship_position)
     }
-
+    
+    flog.trace("t_date_global: %s t_position_idx: %s t_slice %s chunk_load1 %s 
+      chunk_load2: %s", t_date_global, t_position_idx, t_slice, chunk_load1, 
+      chunk_load2, name = "ship_position_chunks", capture = FALSE)
+    
     if (t_global > 1) {
       # Reduction of larval and cyprid stages to zero when ship is underway
       ships_pop <- ships_underway_larval_reduction_fn(ships_pop,
-        x = t_global, ship_position, t1_position_idx
-      )
+        x = t_global, ship_position, t1_position_idx)
     }
 
     # Port emigration
@@ -922,33 +930,29 @@ main_model_fn <- function(ship_imo_tbl, param, A_mat, ports_pop, ...) {
       port_competency_proportion = port_compentency_prob,
       lifestage_vec = port_to_ship_lifestages, x = t_global,
       port_emigration_input = port_cyprid_compentency,
-      port_lifehistory_input = port_lifehistory_status
-    )
+      port_lifehistory_input = port_lifehistory_status)
 
     # Ship emigration
     ship_emigration <- ship_emigration_fn(ships_pop, ships_invasion_prob,
       lifestage_vec = ship_to_port_lifestages, x = t_global,
-      ship_emigration_input = ship_emigration
-    )
+      ship_emigration_input = ship_emigration)
 
     # Port immigration
     port_immigration <- port_immigration_fn(ports_pop, ship_to_port_lifestages,
       ship_emigration, ship_position, t1_position_idx,
       port_immigration_input = port_immigration, x = t_global,
-      ports_instant_mortality, ports_habitat_suitability, habitat_threshold
-    )
+      ports_instant_mortality, ports_habitat_suitability, habitat_threshold,
+      p_establishment)
 
     port_juvenile_production <- port_juvenile_production_fn(ports_pop,
       port_to_ship_lifestages, port_cyprid_compentency, ship_position,
-      t1 = t1_position_idx, x = t_global, port_area = port_area
-    )
+      t1 = t1_position_idx, x = t_global, port_area = port_area)
 
     # Ship immigration
     ship_immigration <- ship_immigration_fn(ships_pop, port_to_ship_lifestages,
       port_cyprid_compentency, ship_position, t1_position_idx,
       ship_immigration_input = ship_immigration, x = t_global,
-      port_area = port_area
-    )
+      port_area = port_area, p_establishment)
 
     # Calculate population change in ports (ports_pop[date, lifestage, port])
     if (t_global > 1) {
@@ -969,15 +973,12 @@ main_model_fn <- function(ship_imo_tbl, param, A_mat, ports_pop, ...) {
         ports_pop_juve <-
           N_ports[
             which(dimnames(N_ports)[[1]] == "juvenile"),
-            match(
-              dimnames(N_ports)[[2]],
-              names(port_juvenile_production)
-            )
+            match(dimnames(N_ports)[[2]],
+              names(port_juvenile_production))
           ] + port_juvenile_production
 
         N_ports_idx <- matrix_match_fn(N_ports, ports_pop_juve,
-          default_rowname = "juvenile"
-        )
+          default_rowname = "juvenile")
 
         if (is.vector(ports_pop_juve)) {
           fill_mat_vec_dbl(N_ports, ports_pop_juve, N_ports_idx)
@@ -1015,26 +1016,18 @@ main_model_fn <- function(ship_imo_tbl, param, A_mat, ports_pop, ...) {
     ports_trace_pop <-
       rowMeans(temp_ports_pop[, dimnames(temp_ports_pop)[[2]] %nin% seed_ports])
 
-    flog.trace("parameter%s port_population %i %f %f %f %f", sprintf(
-      "%.03d",
-      param_iter
-    ), t_global, ports_trace_pop[1], ports_trace_pop[2],
-    ports_trace_pop[3], ports_trace_pop[4],
-    name = "ports_pop_trace",
-    capture = FALSE
-    )
+    flog.trace("parameter%s port_population %i %f %f %f %f",
+      sprintf("%.03d", param_iter), t_global, ports_trace_pop[1],
+      ports_trace_pop[2], ports_trace_pop[3], ports_trace_pop[4],
+      name = "ports_pop_trace", capture = FALSE)
 
     ports_trace_n <- apply(temp_ports_pop[, dimnames(temp_ports_pop)[[2]] %nin%
       seed_ports], 1, function(x) sum(x > 0L))
 
-    flog.trace("parameter%s port_number %i %f %f %f %f", sprintf(
-      "%.03d",
-      param_iter
-    ), t_global, ports_trace_n[1], ports_trace_n[2],
-    ports_trace_n[3], ports_trace_n[4],
-    name = "ports_n_trace",
-    capture = FALSE
-    )
+    flog.trace("parameter%s port_number %i %f %f %f %f",
+      sprintf("%.03d", param_iter), t_global, ports_trace_n[1], ports_trace_n[2],
+      ports_trace_n[3], ports_trace_n[4], name = "ports_n_trace",
+      capture = FALSE)
 
     # Trace for ports_instant_mortality
 
@@ -1043,8 +1036,7 @@ main_model_fn <- function(ship_imo_tbl, param, A_mat, ports_pop, ...) {
 
     flog.trace("parameter%s port_mortality %i %f", sprintf("%.03d", param_iter),
       t_global, ports_instant_mortality_sum,
-      name = "ports_instant_mortality_trace", capture = FALSE
-    )
+      name = "ports_instant_mortality_trace", capture = FALSE)
 
     # Calculate population change on ships
     # ships_pop_array[date, lifestage, ship]
@@ -1056,8 +1048,7 @@ main_model_fn <- function(ship_imo_tbl, param, A_mat, ports_pop, ...) {
 
       dimnames(N_ships) <- list(
         dimnames(ships_pop)[[2]],
-        dimnames(ships_pop)[[3]]
-      )
+        dimnames(ships_pop)[[3]])
 
       ships_logit_factor <- (k_ships - N_ships) / k_ships
 
@@ -1108,14 +1099,9 @@ main_model_fn <- function(ship_imo_tbl, param, A_mat, ports_pop, ...) {
           names(ships_trace_pop) <- dimnames(temp_ships_pop)[[1]]
 
           flog.trace("parameter%s ships_population %i %f %f %f %f",
-            sprintf("%.03d", param_iter),
-            t_global,
-            ships_trace_pop[1],
-            ships_trace_pop[2],
-        ships_trace_pop[3],
-        ships_trace_pop[4],
-        name = "ships_pop_trace",
-        capture = FALSE)
+            sprintf("%.03d", param_iter), t_global, ships_trace_pop[1],
+            ships_trace_pop[2], ships_trace_pop[3], ships_trace_pop[4],
+            name = "ships_pop_trace", capture = FALSE)
 
       # Check to see if ship adult pop size is 0, but ports still get invaded
 
@@ -1126,9 +1112,7 @@ main_model_fn <- function(ship_imo_tbl, param, A_mat, ports_pop, ...) {
     }
 
     flog.info("Model date: %s Parameter: %i Iteration %i completed",
-      t_date_global, param_iter, t_global,
-      name = "model_progress"
-    )
+      t_date_global, param_iter, t_global, name = "model_progress")
   } # End of time processing loop
 
   # Create directories to store results
@@ -1142,11 +1126,9 @@ main_model_fn <- function(ship_imo_tbl, param, A_mat, ports_pop, ...) {
   # files
 
   if (file.exists(results_dir)) {
-    results_dir <- paste0(
-      results_dir,
-      nextElem(alphabet_it)
-    )
+    results_dir <- paste0(results_dir, nextElem(alphabet_it))
   }
+  
   dir_create(results_dir, recurse = TRUE)
 
   # Save data
@@ -1166,57 +1148,41 @@ main_model_fn <- function(ship_imo_tbl, param, A_mat, ports_pop, ...) {
     port_compentency_prob = port_compentency_prob
   )
 
-  saveRDS(param, file = path(results_dir, sprintf(
-    "parameters_%s%s",
-    Sys.Date(), ".RData"
-  )))
+  saveRDS(param, file = path(results_dir,
+    sprintf("parameters_%s%s", Sys.Date(), ".RData")))
 
   flog.info("Parameters saved", name = "model_progress.log")
 
-  saveRDS(ports_pop, file = path(
-    results_dir,
-    sprintf("ports_pop_%s%s", Sys.Date(), ".RData")
-  ))
+  saveRDS(ports_pop, file = path(results_dir,
+    sprintf("ports_pop_%s%s", Sys.Date(), ".RData")))
 
   flog.info("ports_pop saved", name = "model_progress.log")
 
-  saveRDS(ships_pop, file = path(
-    results_dir,
-    sprintf("ships_pop_%s%s", Sys.Date(), ".RData")
-  ))
+  saveRDS(ships_pop, file = path(results_dir,
+    sprintf("ships_pop_%s%s", Sys.Date(), ".RData")))
 
   flog.info("ships_pop saved", name = "model_progress.log")
 
-  saveRDS(port_cyprid_compentency, file = path(
-    results_dir,
-    sprintf("port_cyprid_compentency_%s%s", Sys.Date(), ".RData")
-  ))
+  saveRDS(port_cyprid_compentency, file = path(results_dir,
+    sprintf("port_cyprid_compentency_%s%s", Sys.Date(), ".RData")))
 
   flog.info("port_emigration saved", name = "model_progress.log")
 
-  saveRDS(port_immigration, file = path(
-    results_dir,
-    sprintf("port_immigration_%s%s", Sys.Date(), ".RData")
-  ))
+  saveRDS(port_immigration, file = path(results_dir,
+    sprintf("port_immigration_%s%s", Sys.Date(), ".RData")))
 
   flog.info("port_immigration saved", name = "model_progress.log")
 
-  saveRDS(ship_emigration, file = path(
-    results_dir,
-    sprintf("ship_emigration_%s%s", Sys.Date(), ".RData")
-  ))
+  saveRDS(ship_emigration, file = path(results_dir,
+    sprintf("ship_emigration_%s%s", Sys.Date(), ".RData")))
 
   flog.info("ship_emigration saved", name = "model_progress.log")
 
-  saveRDS(ship_immigration, file = path(
-    results_dir,
-    sprintf("ship_immigration_%s%s", Sys.Date(), ".RData")
-  ))
+  saveRDS(ship_immigration, file = path(results_dir,
+    sprintf("ship_immigration_%s%s", Sys.Date(), ".RData")))
 
-  saveRDS(ports_instant_mortality, file = path(
-    results_dir,
-    sprintf("ports_instant_mortality_%s%s", Sys.Date(), ".RData")
-  ))
+  saveRDS(ports_instant_mortality, file = path(results_dir,
+    sprintf("ports_instant_mortality_%s%s", Sys.Date(), ".RData")))
 
   flog.info("ports_instant_mortality saved", name = "model_progress.log")
 } # End of main_model_fn statement

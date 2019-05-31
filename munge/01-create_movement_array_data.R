@@ -221,8 +221,7 @@ datetype_grep <-
 
 arrivals_only[, datetype_grep] <- lapply(
   arrivals_only[, datetype_grep],
-  function(x)
-    as.POSIXct(x, tz = "UTC")
+  function(x) as.POSIXct(x, tz = "UTC")
 )
 
 # Filter out blacklisted ship types, ports, etc.
@@ -415,8 +414,8 @@ ship_movement_raw_tbl <- ship_movement_raw_tbl %>%
 datetime_df <- tibble(
   datetime =
     seq(
-      from = as.POSIXct("2010-01-01 00:00:00", tz = "UTC"),
-      to = as.POSIXct("2018-01-01 00:00:00", tz = "UTC"),
+      from = as.POSIXct(yaml_params[["params"]][["start_date"]], tz = "UTC"),
+      to = as.POSIXct(yaml_params[["params"]][["end_date"]], tz = "UTC"),
       by = "6 hours"
     )
 ) %>%
@@ -424,13 +423,12 @@ datetime_df <- tibble(
 
 # Set size of number of rows in each chunk to process for data.frames and
 # arrays
-chunk_size <- 50
+chunk_size <- yaml_params[["params"]][["chunk_size"]]
 
 # Do the same for the indices so that we can use these indices for further
 #  extraction
 datetimes_idx_chunks <- chunkr(datetime_df[["datetime_idx"]],
-  chunk_size = chunk_size
-)
+  chunk_size = chunk_size)
 
 datetimes_split <- purrr::map(datetimes_idx_chunks, function(x) datetime_df[x, ])
 
