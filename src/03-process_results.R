@@ -456,34 +456,17 @@ fig2b_no_legend <- fig2b +
 
 fig2c <- ggplot(
   destination_ports_mean_lifestage_df,
-  aes(
-    x = date, y = mean, color = scenario,
-    group = scenario
-  )
-) +
+    aes(x = date, y = mean, color = scenario, group = scenario)) +
   facet_wrap(~lifestage, scales = "free_y") +
-  geom_ribbon(aes(
-    colour = NA, fill = scenario,
-    ymin = pmax(0, lcl), ymax = pmax(0, ucl)
-  ), alpha = 0.2) +
   geom_path() +
-  scale_color_manual("Source; FW reduction",
-    values = custom_cols,
-    drop = FALSE
-  ) +
-  scale_fill_manual("Source; FW reduction",
-    values = custom_cols,
-    drop = FALSE
-  ) +
-  theme_cowplot(font_size = 24) +
-  theme(legend.position = c(0.03, 0.8)) +
-  guides(fill = guide_legend(override.aes = list(alpha = 1))) +
+  scale_color_manual("Scenario", values = custom_cols,
+    drop = FALSE) +
+  scale_fill_manual("Scenario",values = custom_cols,
+    drop = FALSE) +
+  theme_bw() +
   scale_x_date(expand = c(0.1, 0)) +
   scale_y_continuous(labels = formatter_standard) +
-  labs(
-    x = "Time",
-    y = "Population size in destination ports (mean with 95% CL)"
-  )
+  labs(x = "Time", y = "Population size in destination ports")
 
 save_figures("fig2c_all_ports_mean_population_size",
   plot = fig2c, dpi = 600, width = col_2_wide, height = col_2_wide

@@ -221,15 +221,12 @@ datetype_grep <-
 
 arrivals_only[, datetype_grep] <- lapply(
   arrivals_only[, datetype_grep],
-  function(x) as.POSIXct(x, tz = "UTC")
-)
+  function(x) as.POSIXct(x, tz = "UTC"))
 
 # Filter out blacklisted ship types, ports, etc.
 ship_raw_tbl <- arrivals_only %>%
-  filter(
-    nbic_shiptype %nin% ships_blacklist,
-    sub_type %nin% ships_blacklist
-  ) %>%
+  filter(nbic_shiptype %nin% ships_blacklist,
+  	sub_type %nin% ships_blacklist) %>%
   arrange(imo_no, arrival_date)
 
 
@@ -237,12 +234,8 @@ ship_raw_tbl <- arrivals_only %>%
 # calling
 
 ship_raw_tbl <- ship_raw_tbl %>%
-  mutate(port_duration = as.numeric(
-    difftime(departure_date,
-      arrival_date,
-      units = "hours"
-    )
-  )) %>%
+  mutate(port_duration = as.numeric(difftime(departure_date, arrival_date,
+      units = "hours"))) %>%
   arrange(imo_no, arrival_date)
 
 # ----WettedSurfaceArea_Calculations--------------------------------------------
@@ -530,8 +523,8 @@ for (k in seq_along(datetimes_split)) {
   )
 
   for (tt in seq_along(datetime_chunks[["datetime"]])) {
-    # Subset the data.table ship_raw_tbl by time slice, and calculate the duration
-    # in port. Use Mark's data on choosing which ports to use.
+    # Subset the data.table ship_raw_tbl by time slice, and calculate the
+    # duration in port. Use Mark's data on choosing which ports to use.
 
     ship_movement_sub_tbl <- ship_raw_tbl %>%
       filter(
@@ -602,7 +595,8 @@ for (k in seq_along(datetimes_split)) {
       duplicate_arrivals <- which(warn > 1, arr.ind = TRUE)
 
       for (ii in length(duplicate_arrivals)) {
-        duplicate_ports <- which(!is.na(position_array_chunk[duplicate_arrivals[ii], , tt]))
+        duplicate_ports <- which(!is.na(
+        	position_array_chunk[duplicate_arrivals[ii], , tt]))
         position_array_chunk[duplicate_arrivals[ii], , tt] <- NA
         picked_port <- sample(duplicate_ports, size = 1)
         position_array_chunk[duplicate_arrivals[ii], picked_port, tt] <- TRUE

@@ -20,7 +20,7 @@ results_dir <- find_root_file("results", criterion = root_crit)
 figures_dir <- find_root_file("figures", criterion = root_crit)
 data_dir <- find_root_file("data", criterion = root_crit)
 
-process_ports_data <- FALSE
+process_ports_data <- TRUE
 process_ships_data <- TRUE
 
 flog.logger(name = "model_progress_log", INFO, appender = appender.console())
@@ -55,20 +55,9 @@ port_data <- readr::read_csv(path(data_dir, "port_data.csv")) %>%
 
 flog.info("Processing ports info", name = "model_progress_log")
 
-#ports_list <- create_filelist_from_results(pattern = "ports_pop")
-#ports_temp <- purrr::map(ports_list, process_array_fn, full_sample_datespan)
-
+ports_list <- create_filelist_from_results(pattern = "ports_pop")
 
 flog.info("Merging port info with coordinates", name = "model_progress_log")
-
-# Create summary table of port information
-#ports.tex <- xtable::xtable(port_data, booktabs = TRUE, digits = 3)
-
-#print(ports.tex, file.path(root_dir(), "tables", "ports_info.tex"),
-#  tabular.environment = "longtable", floating = FALSE, type = "latex"
-#)
-
-#ports_base_long <- list_process_df_fn(ports_array)
 
 # This section runs all the subroutinese to process the results for each of
 # the ports across all parameters

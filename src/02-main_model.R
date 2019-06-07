@@ -141,25 +141,18 @@ port_cyprid_compentency_fn <- function(ports_array = ports_array,
 
       # Number of compentent cyprids that are available to immigrate to the ships
 
-      p_emigration_mat <- ceiling(outer(
-        lifestage_vec,
-        p_emigration_competent_proportion
-      ) *
+      p_emigration_mat <- ceiling(outer(lifestage_vec,
+          p_emigration_competent_proportion) *
         ports_array[(x - 1), , , drop = TRUE])
 
-      dimnames(p_emigration_mat) <- list(
-        dimnames(ports_array)[[2]],
-        dimnames(ports_array)[[3]]
-      )
+      dimnames(p_emigration_mat) <- list(dimnames(ports_array)[[2]],
+        dimnames(ports_array)[[3]])
 
       ports_emmigration_idx <- cube_match_fn(t1_date_global,
-        A = port_emigration_input, y = p_emigration_mat
-      )
+        A = port_emigration_input, y = p_emigration_mat)
 
-      fill_cube_dbl(
-        port_emigration_input, p_emigration_mat,
-        ports_emmigration_idx
-      )
+      fill_cube_dbl(port_emigration_input, p_emigration_mat,
+        ports_emmigration_idx)
     }
     port_emigration_input
   }
@@ -623,10 +616,14 @@ main_model_fn <- function(ship_imo_tbl, param, A_mat, ports_pop, ...) {
     res
   }
 
-  for (t_global in seq_along(date_list_ext)) {
+ for (t_global in seq_along(date_list_ext)) {
     # Get the time slice position in the chunk as well as the name in the chunk
     # Current date
-
+    
+    if( t_global == 11650) save.image(file.path(root_dir(), "error.RData"))
+    
+				browser(expr = t_global == 11650)
+				
     current_datetime <- dateseq[t_global]
     # date as character format for array position matching
     t_date_global <<- date_list_ext[t_global]
@@ -850,7 +847,7 @@ main_model_fn <- function(ship_imo_tbl, param, A_mat, ports_pop, ...) {
         sprintf("position_array_chunk%0.3d%s", chunk_load2, ".rds")
       ))
 
-      if (t_chunk == 1) {
+      if (t_chunk == 1 | !exists("ship_position")) {
         ship_position <- array(
           data = NA,
           dim = c(
@@ -1004,6 +1001,7 @@ main_model_fn <- function(ship_imo_tbl, param, A_mat, ports_pop, ...) {
       # Round up to nearest integer
       temp_ports_pop <- ceiling(temp_ports_pop)
       stopifnot(!is.null(dimnames(temp_ports_pop)[[2]]))
+      
     } else {
       # In the first time slice, so no t-1 time position
       temp_ports_pop <- ports_pop[t_global, , ]
