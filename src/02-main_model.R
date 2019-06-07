@@ -619,15 +619,10 @@ main_model_fn <- function(ship_imo_tbl, param, A_mat, ports_pop, ...) {
  for (t_global in seq_along(date_list_ext)) {
     # Get the time slice position in the chunk as well as the name in the chunk
     # Current date
-    
-    if( t_global == 11650) save.image(file.path(root_dir(), "error.RData"))
-    
-				browser(expr = t_global == 11650)
-				
+
     current_datetime <- dateseq[t_global]
     # date as character format for array position matching
     t_date_global <<- date_list_ext[t_global]
-
 
     # Add time lags before life-history demographic parameters take effect
     # If t_global is equal to that date, change value in A_port_stoch for that
