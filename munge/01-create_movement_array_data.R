@@ -119,7 +119,7 @@ arrivals_qry <- "SELECT
             AND Departure_date IS NOT NULL)
             AND Status = 'reviewed'
             AND Arrival_Coast IN ('ca_west', 'West', 'Alaska')
-            AND Arrival_date BETWEEN DATE('2010-01-01') AND DATE('2018-01-01')
+            AND Arrival_date BETWEEN DATE('2010-01-01') AND DATE('2018-01-07')
     ORDER BY NBIC_Vessel, Arrival_Date"
 
 arrivals_full <- tbl(ports_con, sql(arrivals_qry)) %>%
@@ -200,6 +200,7 @@ port_data %>%
 # the value is above the threshold for habitat suitability
 
 ports_destfile <- file.path(root_dir(), "data", "port_data.csv")
+
 if (!file.exists(ports_destfile)) {
   readr::write_csv(port_data, file.path(root_dir(), "data", "port_data.csv"))
 }

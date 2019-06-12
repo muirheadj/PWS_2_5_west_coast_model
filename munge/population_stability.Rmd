@@ -62,7 +62,7 @@ The overall survival for each stage (sigma), and the duration of each stage
 ```{r survivalprob}
 balanus_lh <- list("larva" = list("sigma" = 0.515, "T" = 44),
                    "cyprid" = list("sigma" = 0.94, "T" = 12),
-                   "juvenile" = list("sigma" = 0.58, "T" = 84),
+                   "juvenile" = list("sigma" = 0.692, "T" = 112),
                    "adult" = list("sigma" = 0.998, "T" = 2192))
 ```
 
@@ -147,7 +147,7 @@ colnames(A_fit) <- c("larva", "cyprid", "juvenile", "adult")
 
 
 saveRDS(A_fit, file.path(root_dir(), "data",
-    "bal_improvisus_pop_stab_transition.rds"), version = 2)
+    "bal_improvisus_pop_transition.rds"), version = 2)
 
 
 knitr::kable(A_fit)
@@ -161,7 +161,7 @@ names(A_gammas) <- c("larva", "cyprid", "juvenile", "adult")
 knitr::kable(A_gammas)
 ```
 
-```{r run-model, include=FALSE, eval=TRUE}
+```{r run-model, include=FALSE, eval=FALSE}
 source(path(root_dir(), "munge", "01-model_control_pop_stability.R"))
 
 ```

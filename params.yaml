@@ -12,10 +12,10 @@ params:
     - hypothetical_sp: 0.0
     - bal_improvisus: 0.1781
   stable_population_size:
-    - larva: 8905713602.0
-    - cyprid: 936133112.0
-    - juvenile: 108947634.0
-    - adult: 325860930.0
+    - larva: 9021173362.0
+    - cyprid: 933494080.0
+    - juvenile: 148870725.0
+    - adult: 325520817.0
   port_area: 1.0e+07
   max_density_individuals: 5.0e+3
   fw_reduction: 0.0
