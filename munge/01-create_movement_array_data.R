@@ -90,111 +90,60 @@ ports_con <-
   )
 
 # Read in from CSV file
-
-# CHECK ON THIS
 arrivals_qry <- "SELECT
-        NBIC_Vessel AS imo_no,
-            Type AS nbic_shiptype,
-            Sub_Type AS sub_type,
-            Transit_Type AS transit_type,
-            Arrival_Port AS arrival_port,
-            Arrival_Bioregion AS arrival_bioregion,
-            Arrival_Coast AS arrival_coast,
-            Arrival_Lon AS arrival_lon,
-            Arrival_Lat AS arrival_lat,
-            Arrival_date AS arrival_date,
-            Departure_date AS departure_date,
-            Last_Port AS last_port,
-            Last_Lon AS last_lon,
-            Last_Lat AS last_lat,
-            Last_Bioregion AS last_bioregion,
-            Last_Coast AS last_coast
-    FROM
-        NVMCws_Arrivals
-    WHERE
-        NBIC_Vessel IS NOT NULL
-            AND Arrival_Lat IS NOT NULL
-            AND Arrival_Lon IS NOT NULL
-            AND (Arrival_date IS NOT NULL
-            AND Departure_date IS NOT NULL)
-            AND Status = 'reviewed'
-            AND Arrival_Coast IN ('ca_west', 'West', 'Alaska')
-            AND Arrival_date BETWEEN DATE('2010-01-01') AND DATE('2018-01-07')
-    ORDER BY NBIC_Vessel, Arrival_Date"
+    NVMCws_Arrivals.Analysis_year_arrival,
+    NVMCws_Arrivals.NVMC_ID,
+    NVMCws_Arrivals.Arrival_Port,
+    NVMCws_Arrivals.Arrival_Lat,
+    NVMCws_Arrivals.Arrival_Lon,
+    NVMCws_Arrivals.Arrival_Coast,
+    NVMCws_Arrivals.Arrival_Bioregion,
+    NVMCws_Arrivals.Arrival_Date,
+    NVMCws_Arrivals.Departure_Date,
+    NVMCws_Arrivals.Transit_Type,
+    NVMCws_Arrivals.NBIC_Vessel AS imo_no,
+    NVMCws_Arrivals.Type AS nbic_shiptype,
+    NVMCws_Arrivals.Sub_Type
+FROM
+    NVMCws_Arrivals
+WHERE
+    (((NVMCws_Arrivals.Analysis_year_arrival) > 2009
+        AND (NVMCws_Arrivals.Analysis_year_arrival) < 2018)
+        AND ((NVMCws_Arrivals.Status) = 'reviewed')
+        AND ((NVMCws_Arrivals.Sub_Type) NOT Like 'Recreational'
+          AND (NVMCws_Arrivals.Sub_Type) NOT Like 'Unknown'
+          AND (NVMCws_Arrivals.Sub_Type) NOT Like 'Military'
+          AND (NVMCws_Arrivals.Sub_Type) NOT Like 'Barge%')
+        AND ((NVMCws_Arrivals.Arrival_Coast) = 'west'
+          OR (NVMCws_Arrivals.Arrival_Coast) = 'alaska'
+          OR (NVMCws_Arrivals.Arrival_Coast) = 'ca-west'
+          OR NVMCws_Arrivals.Arrival_Bioregion = 'NA-S1')
+        AND ((NVMCws_Arrivals.Transit_Type) LIKE 'c%'
+          OR (NVMCws_Arrivals.Transit_Type) LIKE 'o%')
+        AND ((NVMCws_Arrivals.NBIC_Vessel) IS NOT NULL)
+        AND NVMCws_Arrivals.Arrival_LAT IS NOT NULL)"
 
 arrivals_full <- tbl(ports_con, sql(arrivals_qry)) %>%
   collect(n = Inf)
 
-# Check for ship movement
-
-coastwise_ships <- arrivals_full %>%
-  group_by(imo_no) %>%
-  summarise(transit_status = ifelse(all(transit_type == "Overseas"),
-    "overseas_only", "both"
-  )) %>%
-  filter(transit_status == "both")
+names(arrivals_full) <- tolower(names(arrivals_full))
 
 # Just use the columns on arrivals data. Last port information is required
 # if the last port was on the West Coast, including Canada or Alaska.
 
-arrivals_only <- arrivals_full %>%
-  select(-last_port, -last_lon, -last_lat, -last_bioregion, -last_coast)
-
-arrival_ports <- arrivals_full %>%
+port_data <- arrivals_full %>%
+  filter(arrival_port != "Beaufort Sea") %>%
   select(
-    port = arrival_port, lon = arrival_lon, lat = arrival_lat,
+    port =arrival_port, lon = arrival_lon, lat = arrival_lat,
     bioregion = arrival_bioregion, coast = arrival_coast
   ) %>%
-  unique()
-
-coastwise_arrival_ports <- arrivals_full %>%
-  semi_join(coastwise_ships, by = "imo_no") %>%
-  select(-last_port, -last_lon, -last_lat, -last_bioregion, -last_coast) %>%
-  select(
-    port = arrival_port, lon = arrival_lon, lat = arrival_lat,
-    bioregion = arrival_bioregion, coast = arrival_coast
-  ) %>%
-  unique()
-
-# NOTE: Also includes overseas last ports, temporarily
-
-previous_ports <- arrivals_full %>%
-  select(
-    port = last_port, lon = last_lon, lat = last_lat,
-    bioregion = last_bioregion, coast = last_coast
-  ) %>%
-  unique()
-
-coastwise_previous_ports <- arrivals_full %>%
-  semi_join(coastwise_ships, by = "imo_no") %>%
-  select(
-    port = last_port, lon = last_lon, lat = last_lat,
-    bioregion = last_bioregion, coast = last_coast
-  ) %>%
-  unique()
+  unique() %>%
+  arrange(port)
 
 # Port data includes last ports that are not on the West Coast or Alaska,
 # but are filtered out in the next step
 
-port_data <- bind_rows(arrival_ports, previous_ports) %>%
-  unique() %>%
-  filter(port != "Beaufort Sea",
-    !is.na(lat) | !is.na(lon), !is.na(bioregion),
-    (coast %in% c("Alaska", "ca-west", "West") | bioregion == "NA-S1")
-  ) %>%
-  arrange(port)
 
-coastwise_port_data <-
-  bind_rows(coastwise_arrival_ports, coastwise_previous_ports) %>%
-  unique() %>%
-  filter(
-    !is.na(lat) | !is.na(lon), !is.na(bioregion),
-    (coast %in% c("Alaska", "ca-west", "West") | bioregion == "NA-S1")
-  ) %>%
-  arrange(port)
-
-port_data %>%
-  anti_join(coastwise_port_data)
 
 # Read in raster data, and create a new column for every species if
 # the value is above the threshold for habitat suitability
@@ -205,30 +154,44 @@ if (!file.exists(ports_destfile)) {
   readr::write_csv(port_data, file.path(root_dir(), "data", "port_data.csv"))
 }
 
+if (file.exists(ports_destfile)) {
+  port_data <- readr::read_csv(file.path(root_dir(), "data", "port_data.csv"))
+}
 saveRDS(port_data, file.path(root_dir(), "data", "port_data.rds"), version = 2)
 
 
 # ship movement ---------------------------------------------------------------
-# Ports blacklist to exclude from analysis
-
-ships_blacklist <- c("Military", "Unknown", "Recreational")
-
 # Change dates and times to POSIXct format
 
 datetype_grep <-
-  grepl("[0-9]{4}[-][0-9]{2}[-][0-9]{2}.*", arrivals_only[1:5, ],
+  grepl("[0-9]{4}[-][0-9]{2}[-][0-9]{2}.*", arrivals_full[1:9, ],
     perl = TRUE
   )
 
-arrivals_only[, datetype_grep] <- lapply(
-  arrivals_only[, datetype_grep],
+arrivals_full[, datetype_grep] <- lapply(
+  arrivals_full[, datetype_grep],
   function(x) as.POSIXct(x, tz = "UTC"))
 
 # Filter out blacklisted ship types, ports, etc.
-ship_raw_tbl <- arrivals_only %>%
-  filter(nbic_shiptype %nin% ships_blacklist,
-  	sub_type %nin% ships_blacklist) %>%
+ship_raw_tbl <- arrivals_full %>%
   arrange(imo_no, arrival_date)
+
+# Fix ship types for nbic_type = "Unknown" and sub_type = "Tug"
+ship_raw_tbl <- ship_raw_tbl %>%
+  mutate(nbic_shiptype = case_when(
+      nbic_shiptype == "Other" & sub_type == "Tug" ~ "Tug",
+      nbic_shiptype == "Unknown" & sub_type == "Tug" ~ "Tug",
+      nbic_shiptype == "Unknown" & sub_type == "Passenger" ~ "Passenger",
+      nbic_shiptype == "Unknown" & sub_type == "Bulker" ~ "Bulker",
+      nbic_shiptype == "Unknown" & sub_type == "TugOilBarge" ~ "Tug",
+      nbic_shiptype == "Unknown" & sub_type == "TugBarge" ~ "Tug",
+      nbic_shiptype == "Unknown" & sub_type == "TugTankBarge" ~ "Tug",
+      nbic_shiptype == "Unknown" & sub_type == "Other" ~ "Other",
+      nbic_shiptype == "Unknown" & sub_type == "General Cargo" ~ "General Cargo",
+      nbic_shiptype == "Unknown" & sub_type == "Oil Spill Recovery" ~ "Other",
+      nbic_shiptype == "Unknown" & sub_type == "OSRV" ~ "Other",
+      nbic_shiptype == "Unknown" & sub_type == "OSV" ~ "Offshore Supply Vessel",
+      TRUE ~ nbic_shiptype))
 
 
 # Calculate difference between ArrivalDateStd and SailDateStd for each port
@@ -373,6 +336,11 @@ ship_imo_temp_tbl <- ship_imo_temp_tbl %>%
   ungroup() %>%
   mutate(lrnoimoshipno = paste0("IMO", as.character(lrnoimoshipno)))
 
+#nrow(ship_imo_temp_tbl)
+#length(ship_imo_temp_tbl$lrnoimoshipno)
+#length(unique(ship_imo_temp_tbl$lrnoimoshipno))
+
+
 flog.info("Begin multiple imputation to fill in missing WSA", name = "info.log")
 
 # Use multiple imputation for missing wsa values
@@ -392,6 +360,8 @@ ship_imo_tbl <-
   select(lrnoimoshipno, wsa)
 
 rm(ship_imo_temp_tbl)
+
+
 
 # Join arrivals table with imputed wsa values
 
@@ -455,12 +425,18 @@ ship_raw_tbl <- ship_raw_tbl %>%
 
 # Get unique port and ship names to define array dimensions ## -----------------
 port_names <- port_data %>%
-  purrr::pluck("port")
+  purrr::pluck("port") %>%
+  unique()
 
 ship_names <- ship_raw_tbl %>%
   purrr::pluck("lrnoimoshipno") %>%
   unique() %>%
   sort()
+  
+# Filter out ships from the ship_imo_tbl that are not in the ship_raw_tbl
+
+ship_imo_tbl <- ship_imo_tbl %>%
+ filter(lrnoimoshipno %in% ship_names) 
 
 
 # Preallocate ships, and ports arrays ------------------------------------------
